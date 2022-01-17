@@ -5,6 +5,7 @@ import torch
 
 from deepproblog.dataset import DataLoader
 from deepproblog.engines import ApproximateEngine, ExactEngine
+from deepproblog.engines.mc_engine import MCEngine
 from deepproblog.evaluate import get_confusion_matrix
 from deepproblog.examples.MNIST.network import MNIST_Net
 from deepproblog.examples.MNIST.data import (
@@ -18,10 +19,11 @@ from deepproblog.network import Network
 from deepproblog.train import train_model
 from deepproblog.utils import get_configuration, format_time_precise, config_to_string
 
+# I suppose this is done to enumerate the possible configurations?
 i = int(sys.argv[1]) if len(sys.argv) > 1 else 0
 
 parameters = {
-    "method": ["gm", "exact"],
+    "method": ["mc", "exact", "gm"],
     "N": [1, 2, 3],
     "pretrain": [0],
     "exploration": [False, True],
@@ -58,6 +60,10 @@ elif configuration["method"] == "gm":
         ApproximateEngine(
             model, 1, geometric_mean, exploration=configuration["exploration"]
         )
+    )
+elif configuration["method"] == "mc":
+    model.set_engine(
+        MCEngine(model)
     )
 model.add_tensor_source("train", MNIST_train)
 model.add_tensor_source("test", MNIST_test)

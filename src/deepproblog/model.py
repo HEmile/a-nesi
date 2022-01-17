@@ -21,7 +21,7 @@ from .network import Network
 from .optimizer import Optimizer
 from .query import Query
 from .semiring import Result
-from .solver import Solver
+from .solver import ACSolver, Solver, MCSolver
 from .utils import check_path
 
 
@@ -99,7 +99,10 @@ class Model(object):
         :param kwargs: Additional arguments passed to the solver.
         :return:
         """
-        self.solver = Solver(self, engine, **kwargs)
+        if engine.use_circuits():
+            self.solver = ACSolver(self, engine, **kwargs)
+        else:
+            self.solver = MCSolver(self, engine)
         register_tensor_predicates(engine)
 
     def solve(self, batch: Sequence[Query]) -> List[Result]:

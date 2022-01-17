@@ -81,3 +81,6 @@ class Engine(object):
     @staticmethod
     def can_cache() -> bool:
         return False
+
+    def use_circuits(self) -> bool:
+        return True

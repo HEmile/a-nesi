@@ -1,9 +1,11 @@
+import traceback
 from time import time
 from typing import Type, TYPE_CHECKING, Optional, List, Sequence
 
 from deepproblog.arithmetic_circuit import ArithmeticCircuit
 from deepproblog.engines import Engine
 from deepproblog.query import Query
+from deepproblog.sampling.sample import estimate
 from deepproblog.semiring import Result
 from deepproblog.semiring.graph_semiring import GraphSemiring, Semiring
 from deepproblog.utils.cache import Cache
@@ -18,8 +20,26 @@ class SolverException(Exception):
     def __init__(self, *args: object) -> None:
         super().__init__(*args)
 
-
 class Solver(object):
+    engine: Engine
+
+    def solve(self, batch: Sequence[Query]) -> List[Result]:
+        """
+        Performs inference for a batch of queries.
+        :param batch: A list of queries to perform inference on.
+        :return: A list of results for the given queries.
+        """
+        pass
+
+    def get_tensor(self, term: Term):
+        return self.engine.get_tensor(term)
+
+    def get_hyperparameters(self) -> dict:
+        parameters = dict()
+        parameters["engine"] = self.engine.get_hyperparameters()
+        return parameters
+
+class ACSolver(Solver):
     """
     A class that bundles the different steps of inference.
     """
@@ -45,12 +65,13 @@ class Solver(object):
                 "Caching is enabled, but {} cannot cache.".format(type(engine))
             )
 
-        self.cache = Cache[Query, ArithmeticCircuit](
-            func=self.build_ac,
-            cache=cache,
-            cache_root=cache_root,
-            key_func=lambda x: x.query,
-        )
+        if engine.use_circuits():
+            self.cache = Cache[Query, ArithmeticCircuit](
+                func=self.build_ac,
+                cache=cache,
+                cache_root=cache_root,
+                key_func=lambda x: x.query,
+            )
         self.engine = engine
         self.model = model
         self.program = self.engine.prepare(model.program)
@@ -90,7 +111,49 @@ class Solver(object):
         return self.engine.get_tensor(term)
 
     def get_hyperparameters(self) -> dict:
-        parameters = dict()
-        parameters["engine"] = self.engine.get_hyperparameters()
+        parameters = super().get_hyperparameters()
         parameters["semiring"] = self.semiring.__name__
+
         return parameters
+
+class MCSolver(Solver):
+    """
+    A class that bundles the different steps of inference.
+    MCSolver uses monte carlo inference instead of using arithmetic circuits.
+    """
+
+    def __init__(
+        self,
+        model: "Model",
+        engine: Engine
+    ):
+        """
+
+        :param model: The model in which queries will be evaluated.
+        :param engine: The engine that will be used to ground queries.
+        """
+        self.engine = engine
+        self.model = model
+        self.program = self.engine.prepare(model.program)
+
+    def solve(self, batch: Sequence[Query]) -> List[Result]:
+        """
+        Performs inference for a batch of queries.
+        :param batch: A list of queries to perform inference on.
+        :return: A list of results for the given queries.
+        """
+        self.engine.tensor_store.clear()
+
+        # Should run with the --with-facts option to get the chosen facts when samplign
+        final_result = None
+        # try:
+        # Estimate the probability of the query
+        results = estimate(self.model, self.program, batch, n=10)
+        print(results)
+        # # except Exception as err:
+        # #     trace = traceback.format_exc()
+        # #     err.trace = trace
+        # #     final_result = (False, err)
+        # #     print(trace)
+
+        return []

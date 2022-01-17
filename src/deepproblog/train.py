@@ -94,7 +94,11 @@ class TrainObject(object):
     ) -> Logger:
 
         self.previous_handler = signal.getsignal(signal.SIGINT)
-        loss_function = getattr(self.model.solver.semiring, loss_function_name)
+        if hasattr(self.model.solver, "semiring"):
+            loss_function = getattr(self.model.solver.semiring, loss_function_name)
+        else:
+            # TODO
+            loss_function = None
 
         self.accumulated_loss = 0
         self.timing = [0, 0, 0]
