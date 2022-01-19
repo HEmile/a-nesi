@@ -148,7 +148,7 @@ class MCSolver(Solver):
         final_result = None
         # try:
         # Estimate the probability of the query
-        results = estimate(self.model, self.program, batch, n=10)
+        results = estimate(self.model, self.program, batch, n=100)
         print(results)
         # # except Exception as err:
         # #     trace = traceback.format_exc()

@@ -41,8 +41,9 @@ limitations under the License.
 import logging
 import random
 import time
-from typing import Sequence, TYPE_CHECKING, Tuple
+from typing import Sequence, TYPE_CHECKING, Tuple, Dict
 
+from problog.clausedb import ClauseDB
 from problog.engine_stack import FixedContext
 from problog.errors import process_error, GroundingError
 from problog.formula import LogicFormula
@@ -50,7 +51,7 @@ from problog.logic import Term, Constant, ArithmeticError, term2list
 from problog.program import PrologFile, LogicProgram
 from problog.tasks.sample import init_db, RateCounter, init_engine, verify_evidence, sample_poisson, FunctionStore, \
     SampledFormula
-from torch.distributions import Categorical
+from torch.distributions import Categorical, Distribution
 
 from deepproblog.query import Query
 
@@ -62,10 +63,11 @@ if TYPE_CHECKING:
 class SampledFormulaDPL(SampledFormula):
     model: "Model"
 
-    def __init__(self, model: "Model", **kwargs):
+    def __init__(self, model: "Model", probability_map: Dict[Term, Distribution], **kwargs):
         SampledFormula.__init__(self, **kwargs)
         self.model = model
         self.sampled_nn_values = dict()
+        self.probability_map = probability_map
 
 
     def _is_nn_probability(self, probability: Term):
@@ -134,7 +136,6 @@ class SampledFormulaDPL(SampledFormula):
                         result_node = self.FALSE
                 elif self._is_nn_probability(probability):
                     # Sample from nn code.
-                    # TODO: Cache the results. If it is necessary, that is. (seems to be)
                     # TODO: This now assumes a categorical distribution. What about bernoulli?
                     to_evaluate = [(probability.args[0], probability.args[1])]
                     name = Term(probability.args[0], probability.args[1])
@@ -146,16 +147,19 @@ class SampledFormulaDPL(SampledFormula):
                         else:
                             result_node = self.FALSE
                     else:
+                        if name in self.probability_map:
+                            # If we compute probabilities before, look up in the map
+                            distr = self.probability_map[name]
+                        else:
+                            # Compute probabilities by evaluating model
+                            res = self.model.evaluate_nn(to_evaluate)[to_evaluate[0]]
+                            distr = Categorical(res)
+                            self.probability_map[name] = distr
                         # Time to sample
-                        res = self.model.evaluate_nn(to_evaluate)[to_evaluate[0]]
-                        distr = Categorical(res)
                         sample = distr.sample()
                         prob = distr.log_prob(sample).exp()
                         sample = int(sample.detach().numpy())
                         prob = prob.detach().numpy()
-                        print(identifier)
-                        print(probability)
-                        print(sample, prob)
                         self.probability *= prob
                         self.sampled_nn_values[name] = sample
                         if sample == probability.args[2]:
@@ -167,7 +171,6 @@ class SampledFormulaDPL(SampledFormula):
                     self.probability *= prob
                     result_node = self.add_value(value)
                 self.facts[identifier] = result_node
-                print(identifier, result_node)
                 return result_node
             else:
                 return self.facts[identifier]
@@ -232,104 +235,54 @@ def init_db(engine, model: LogicProgram, propagate_evidence=False):
     return db, evidence_facts, ev_target
 
 
-def sample(
-    model,
-    n=1,
-    format="str",
-    propagate_evidence=False,
-    distributions=None,
-    progress=False,
-    **kwdargs
-):
-    engine = init_engine(**kwdargs)
-    db, evidence, ev_target = init_db(engine, model, propagate_evidence)
-    i = 0
-    r = 0
-
-    if progress:
-        rate = RateCounter()
-
-    try:
-        while i < n or n == 0:
-            target = SampledFormula()
-            if distributions is not None:
-                target.distributions.update(distributions)
-
-            for ev_fact in evidence:
-                target.add_atom(*ev_fact)
-
-            engine.functions = FunctionStore(target=target, database=db, engine=engine)
-            # TODO!
-            result = ground(engine, db, target=target)
-            if verify_evidence(engine, db, ev_target, target):
-                if format == "str":
-                    yield result.to_string(db, **kwdargs)
-                else:
-                    yield result.to_dict()
-                i += 1
-            else:
-                r += 1
-            engine.previous_result = result
-            if progress:
-                rate.update()
-    except KeyboardInterrupt:
-        pass
-    if r:
-        logging.getLogger("problog_sample").info("Rejected samples: %s" % r)
-
-
 # noinspection PyUnusedLocal
-def estimate(model: "Model", program: LogicProgram, batch: Sequence[Query], n=0, propagate_evidence=False, **kwdargs):
+def estimate(model: "Model", program: ClauseDB, batch: Sequence[Query], n=0, propagate_evidence=False, **kwdargs):
     # Initial version will not support evidence propagation.
     from collections import defaultdict
 
+    estimates = defaultdict(float)
+    start_time = time.time()
+
+    total_counts = 0.0
     for query in batch:
         engine = init_engine(**kwdargs)
         db, evidence, ev_target = init_db(engine, program, propagate_evidence)
 
-        start_time = time.time()
-        estimates = defaultdict(float)
-        counts = 0.0
-        r = 0
+        queryS = query.substitute().query
+        query_counts = 0.0
+        # r = 0
+        # This map gets reused over multiple sample of the same query, so we do not query the NN model unnecessarily
+        probability_map = {}
         try:
-            while n == 0 or counts < n:
-                target = SampledFormulaDPL(model)
+            while n == 0 or query_counts < n:
+                target = SampledFormulaDPL(model, probability_map)
                 # for ev_fact in evidence:
                 #     target.add_atom(*ev_fact)
-
-                queryS = query.substitute().query
-
                 result: SampledFormulaDPL = ground(engine, db, query.substitute().query, target=target)
 
-                # Evidence propagation & Evidence checking. To be implemented later.
-                # if verify_evidence(engine, db, query):
-                # else:
-                #     r += 1
-
-                if queryS in result.facts and result.facts[queryS]:
-                    estimates[queryS] += 1.0
-                counts += 1.0
+                for name, truth_value in result.queries():
+                    if name == queryS and truth_value == result.TRUE:
+                        estimates[queryS] += 1.0
+                query_counts += 1.0
 
                 engine.previous_result = result
-                print(result)
         except KeyboardInterrupt:
             pass
         except SystemExit:
             pass
 
-        total_time = time.time() - start_time
-        rate = counts / total_time
-        print(
-            "%% Probability estimate after %d samples (%.4f samples/second):"
-            % (counts, rate)
-        )
-        print(estimates)
+        # if r:
+        #     logging.getLogger("problog_sample").info("Rejected samples: %s" % r)
 
-        if r:
-            logging.getLogger("problog_sample").info("Rejected samples: %s" % r)
-
-        for k in estimates:
-            estimates[k] = estimates[k] / counts
+        estimates[queryS] = estimates[queryS] / query_counts
+        total_counts += query_counts
+    total_time = time.time() - start_time
+    rate = total_counts / total_time
+    print(
+        "%% Probability estimate after %d samples (%.4f samples/second):"
+        % (total_counts, rate)
+    )
+    print(estimates)
     return estimates
 
 
