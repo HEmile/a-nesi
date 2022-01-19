@@ -2,6 +2,7 @@ import signal
 import time
 from typing import List, Callable, Union
 
+import storch
 from deepproblog.dataset import DataLoader
 from deepproblog.model import Model
 from deepproblog.query import Query
@@ -37,10 +38,14 @@ class TrainObject(object):
         """
         total_loss = 0
         result = self.model.solve(batch)
+        print(result)
         for r in result:
-            self.timing[0] += r.ground_time / len(batch)
-            self.timing[1] += r.compile_time / len(batch)
-            self.timing[2] += r.eval_time / len(batch)
+            if r.ground_time:
+                self.timing[0] += r.ground_time / len(batch)
+            if r.compile_time:
+                self.timing[1] += r.compile_time / len(batch)
+            if r.eval_time:
+                self.timing[2] += r.eval_time / len(batch)
         result = [
             (result[i], batch[i]) for i in range(len(batch)) if len(result[i]) > 0
         ]
@@ -94,11 +99,13 @@ class TrainObject(object):
     ) -> Logger:
 
         self.previous_handler = signal.getsignal(signal.SIGINT)
+        use_storch_training = False
         if hasattr(self.model.solver, "semiring"):
             loss_function = getattr(self.model.solver.semiring, loss_function_name)
         else:
             # TODO
             loss_function = None
+            use_storch_training = True
 
         self.accumulated_loss = 0
         self.timing = [0, 0, 0]
@@ -126,11 +133,23 @@ class TrainObject(object):
                 self.i += 1
                 self.model.train()
                 self.model.optimizer.zero_grad()
-                if with_negatives:
-                    loss = self.get_loss_with_negatives(batch, loss_function)
+                if use_storch_training:
+                    # TODO: No loss for negatives
+                    result = self.model.solve(batch)
+                    for r in result:
+                        assert r.found_proof
+                        # TODO: Can there ever be multiple keys? (ie multiple queries?
+                        #  Also: Should they then be combined like this?
+                        for q in r.found_proof:
+                            storch.add_cost(r.found_proof[q], f'found_proof_{q}')
+                        prob_query = storch.backward()
+                        self.accumulated_loss += prob_query / len(result)
                 else:
-                    loss = self.get_loss(batch, loss_function)
-                self.accumulated_loss += loss
+                    if with_negatives:
+                        loss = self.get_loss_with_negatives(batch, loss_function)
+                    else:
+                        loss = self.get_loss(batch, loss_function)
+                    self.accumulated_loss += loss
 
                 self.model.optimizer.step()
                 self.log(verbose=verbose, log_iter=log_iter, **kwargs)

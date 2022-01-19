@@ -144,16 +144,6 @@ class MCSolver(Solver):
         """
         self.engine.tensor_store.clear()
 
-        # Should run with the --with-facts option to get the chosen facts when samplign
-        final_result = None
-        # try:
-        # Estimate the probability of the query
-        results = estimate(self.model, self.program, batch, n=100)
-        print(results)
-        # # except Exception as err:
-        # #     trace = traceback.format_exc()
-        # #     err.trace = trace
-        # #     final_result = (False, err)
-        # #     print(trace)
+        results = estimate(self.model, self.program, batch, n=10)
 
-        return []
+        return results

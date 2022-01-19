@@ -3,6 +3,7 @@ from typing import Optional, Dict, Union
 
 import torch
 
+import storch
 from deepproblog.query import Query
 from problog.evaluator import Semiring as ProbLogSemiring
 from problog.formula import LogicFormula
@@ -55,7 +56,8 @@ class Result(object):
     def __init__(
         self,
         result: Dict[Term, Union[float, torch.Tensor]],
-        semiring: Semiring,
+        found_proof: Dict[Term, storch.Tensor] = None,
+        semiring: Optional[Semiring] = None,
         ground_time: Optional[float] = None,
         compile_time: Optional[float] = None,
         eval_time: Optional[float] = None,
@@ -81,6 +83,7 @@ class Result(object):
         self.compile_time = compile_time
         self.eval_time = eval_time
         self.proof = proof
+        self.found_proof = found_proof
 
     def __iter__(self):
         return iter(self.result.keys())

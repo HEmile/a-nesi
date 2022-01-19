@@ -41,7 +41,7 @@ limitations under the License.
 import logging
 import random
 import time
-from typing import Sequence, TYPE_CHECKING, Tuple, Dict
+from typing import Sequence, TYPE_CHECKING, Tuple, Dict, List
 
 from problog.clausedb import ClauseDB
 from problog.engine_stack import FixedContext
@@ -51,9 +51,13 @@ from problog.logic import Term, Constant, ArithmeticError, term2list
 from problog.program import PrologFile, LogicProgram
 from problog.tasks.sample import init_db, RateCounter, init_engine, verify_evidence, sample_poisson, FunctionStore, \
     SampledFormula
-from torch.distributions import Categorical, Distribution
+from torch.distributions import Categorical, Distribution, OneHotCategorical
 
 from deepproblog.query import Query
+from deepproblog.semiring import Result
+from storch.method import Method
+import storch
+import torch
 
 if TYPE_CHECKING:
     from deepproblog.model import Model
@@ -63,11 +67,12 @@ if TYPE_CHECKING:
 class SampledFormulaDPL(SampledFormula):
     model: "Model"
 
-    def __init__(self, model: "Model", probability_map: Dict[Term, Distribution], **kwargs):
+    def __init__(self, model: "Model", sample_map: Dict[Term, storch.StochasticTensor], method_factory, query_counts: int, **kwargs):
         SampledFormula.__init__(self, **kwargs)
         self.model = model
-        self.sampled_nn_values = dict()
-        self.probability_map = probability_map
+        self.sample_map: Dict[Term, storch.StochasticTensor] = sample_map
+        self.method_factory = method_factory
+        self.query_counts = query_counts
 
 
     def _is_nn_probability(self, probability: Term):
@@ -137,35 +142,30 @@ class SampledFormulaDPL(SampledFormula):
                 elif self._is_nn_probability(probability):
                     # Sample from nn code.
                     # TODO: This now assumes a categorical distribution. What about bernoulli?
-                    to_evaluate = [(probability.args[0], probability.args[1])]
                     name = Term(probability.args[0], probability.args[1])
-                    if name in self.sampled_nn_values:
-                        # Already sampled
-                        value = self.sampled_nn_values[name]
-                        if value == probability.args[2]:
-                            result_node = self.TRUE
-                        else:
-                            result_node = self.FALSE
+                    if name not in self.sample_map:
+                        to_evaluate = [(probability.args[0], probability.args[1])]
+                        # Compute probabilities by evaluating model
+                        res: torch.Tensor = self.model.evaluate_nn(to_evaluate)[to_evaluate[0]]
+                        distr: Distribution = OneHotCategorical(res)
+
+                        # Sample using Storchastic
+                        method = self.method_factory("z")
+                        sample = method.sample(distr)
+                        self.sample_map[name] = sample
+                    sample = self.sample_map[name]
+                    # Lookup sample in sampled storch.Tensor
+                    distr = sample.distribution
+                    detach_sample: torch.Tensor = sample._tensor[self.query_counts]
+                    prob = distr.log_prob(detach_sample).exp()
+                    prob = prob.detach().numpy()
+                    self.probability *= prob
+                    self.sample_map[name] = sample
+                    # TODO: Make sure this comparison is valid.
+                    if detach_sample[int(probability.args[2])] == 1:
+                        result_node = self.TRUE
                     else:
-                        if name in self.probability_map:
-                            # If we compute probabilities before, look up in the map
-                            distr = self.probability_map[name]
-                        else:
-                            # Compute probabilities by evaluating model
-                            res = self.model.evaluate_nn(to_evaluate)[to_evaluate[0]]
-                            distr = Categorical(res)
-                            self.probability_map[name] = distr
-                        # Time to sample
-                        sample = distr.sample()
-                        prob = distr.log_prob(sample).exp()
-                        sample = int(sample.detach().numpy())
-                        prob = prob.detach().numpy()
-                        self.probability *= prob
-                        self.sampled_nn_values[name] = sample
-                        if sample == probability.args[2]:
-                            result_node = self.TRUE
-                        else:
-                            result_node = self.FALSE
+                        result_node = self.FALSE
                 else:
                     value, prob = self.sample_value(probability)
                     self.probability *= prob
@@ -222,8 +222,8 @@ def init_db(engine, model: LogicProgram, propagate_evidence=False):
     #     ev_target.propagate(ev_nodes, ev_target.lookup_evidence)
     #
     #     evidence_facts = []
-    #     for index, value in ev_target.lookup_evidence.items():
-    #         node = ev_target.get_node(index)
+    #     for query_counts, value in ev_target.lookup_evidence.items():
+    #         node = ev_target.get_node(query_counts)
     #         if ev_target.is_true(value):
     #             evidence_facts.append((node[0], 1.0) + node[2:])
     #         elif ev_target.is_false(value):
@@ -235,55 +235,62 @@ def init_db(engine, model: LogicProgram, propagate_evidence=False):
     return db, evidence_facts, ev_target
 
 
+def factory_storch_method(n: int):
+    def create_storch_method(atom_name: str):
+        return storch.method.ScoreFunction(atom_name, n_samples=n)
+    return create_storch_method
+
+
+
 # noinspection PyUnusedLocal
-def estimate(model: "Model", program: ClauseDB, batch: Sequence[Query], n=0, propagate_evidence=False, **kwdargs):
+def estimate(model: "Model", program: ClauseDB, batch: Sequence[Query], n=0, propagate_evidence=False, **kwdargs) -> List[Result]:
     # Initial version will not support evidence propagation.
     from collections import defaultdict
 
-    estimates = defaultdict(float)
-    start_time = time.time()
+    results = []
 
-    total_counts = 0.0
     for query in batch:
+        estimates = defaultdict(float)
+        start_time = time.time()
         engine = init_engine(**kwdargs)
         db, evidence, ev_target = init_db(engine, program, propagate_evidence)
 
         queryS = query.substitute().query
-        query_counts = 0.0
+        query_counts = 0
         # r = 0
         # This map gets reused over multiple sample of the same query, so we do not query the NN model unnecessarily
-        probability_map = {}
-        try:
-            while n == 0 or query_counts < n:
-                target = SampledFormulaDPL(model, probability_map)
-                # for ev_fact in evidence:
-                #     target.add_atom(*ev_fact)
-                result: SampledFormulaDPL = ground(engine, db, query.substitute().query, target=target)
+        sample_map = {}
+        costs = []
+        while n == 0 or query_counts < n:
+            target = SampledFormulaDPL(model, sample_map, factory_storch_method(n), query_counts)
+            # for ev_fact in evidence:
+            #     target.add_atom(*ev_fact)
+            result: SampledFormulaDPL = ground(engine, db, query.substitute().query, target=target)
 
-                for name, truth_value in result.queries():
-                    if name == queryS and truth_value == result.TRUE:
-                        estimates[queryS] += 1.0
-                query_counts += 1.0
+            for name, truth_value in result.queries():
+                if name == queryS and truth_value == result.TRUE:
+                    estimates[queryS] += 1.0
+                    costs.append(1)
+                else:
+                    costs.append(0)
+            query_counts += 1
 
-                engine.previous_result = result
-        except KeyboardInterrupt:
-            pass
-        except SystemExit:
-            pass
+            engine.previous_result = result
 
         # if r:
         #     logging.getLogger("problog_sample").info("Rejected samples: %s" % r)
 
+        assert len(sample_map) > 0
+        cost_tensor = torch.tensor(costs)
+        parents: [storch.Tensor] = list(sample_map.values())
+        found_proof = storch.Tensor(cost_tensor, parents, parents[0].plates, "found_proof")
+
         estimates[queryS] = estimates[queryS] / query_counts
-        total_counts += query_counts
-    total_time = time.time() - start_time
-    rate = total_counts / total_time
-    print(
-        "%% Probability estimate after %d samples (%.4f samples/second):"
-        % (total_counts, rate)
-    )
-    print(estimates)
-    return estimates
+        found_proof = {queryS: found_proof}
+        query_time = time.time() - start_time
+        results.append(Result(estimates, found_proof=found_proof, ground_time=query_time))
+
+    return results
 
 
 
