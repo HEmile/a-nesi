@@ -38,7 +38,6 @@ class TrainObject(object):
         """
         total_loss = 0
         result = self.model.solve(batch)
-        print(result)
         for r in result:
             if r.ground_time:
                 self.timing[0] += r.ground_time / len(batch)

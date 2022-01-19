@@ -156,7 +156,10 @@ class SampledFormulaDPL(SampledFormula):
                     sample = self.sample_map[name]
                     # Lookup sample in sampled storch.Tensor
                     distr = sample.distribution
-                    detach_sample: torch.Tensor = sample._tensor[self.query_counts]
+                    if sample.n == 1:
+                        detach_sample = sample._tensor
+                    else:
+                        detach_sample: torch.Tensor = sample._tensor[self.query_counts]
                     prob = distr.log_prob(detach_sample).exp()
                     prob = prob.detach().numpy()
                     self.probability *= prob
@@ -268,9 +271,10 @@ def estimate(model: "Model", program: ClauseDB, batch: Sequence[Query], n=0, pro
             result: SampledFormulaDPL = ground(engine, db, query.substitute().query, target=target)
 
             for name, truth_value in result.queries():
+                # Note: We are minimizing, so we have negative numbers for good results!
                 if name == queryS and truth_value == result.TRUE:
                     estimates[queryS] += 1.0
-                    costs.append(1)
+                    costs.append(-1)
                 else:
                     costs.append(0)
             query_counts += 1

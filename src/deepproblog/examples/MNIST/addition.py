@@ -23,7 +23,7 @@ from deepproblog.utils import get_configuration, format_time_precise, config_to_
 i = int(sys.argv[1]) if len(sys.argv) > 1 else 0
 
 parameters = {
-    "method": ["mc", "exact", "gm"],
+    "method": ["exact", "exact", "gm"],
     "N": [1, 2, 3],
     "pretrain": [0],
     "exploration": [False, True],

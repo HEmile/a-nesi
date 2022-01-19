@@ -56,12 +56,12 @@ class Result(object):
     def __init__(
         self,
         result: Dict[Term, Union[float, torch.Tensor]],
-        found_proof: Dict[Term, storch.Tensor] = None,
         semiring: Optional[Semiring] = None,
         ground_time: Optional[float] = None,
         compile_time: Optional[float] = None,
         eval_time: Optional[float] = None,
         proof: Optional[LogicFormula] = None,
+        found_proof: Dict[Term, storch.Tensor] = None,
     ):
         """Construct object
 
