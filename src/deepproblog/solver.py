@@ -144,6 +144,6 @@ class MCSolver(Solver):
         """
         self.engine.tensor_store.clear()
 
-        results = estimate(self.model, self.program, batch, n=1)
+        results = estimate(self.model, self.program, batch, n=10)
 
         return results

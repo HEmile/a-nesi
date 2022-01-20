@@ -55,7 +55,7 @@ class TrainObject(object):
         return total_loss
 
     def get_loss_with_negatives(
-        self, batch: List[Query], backpropagate_loss: Callable
+            self, batch: List[Query], backpropagate_loss: Callable
     ) -> float:
         """
         Calculates and propagates the loss for a given batch of queries and loss function.
@@ -86,15 +86,15 @@ class TrainObject(object):
         return total_loss
 
     def train(
-        self,
-        loader: DataLoader,
-        stop_criterion: Union[int, StopCondition],
-        verbose: int = 1,
-        loss_function_name: str = "cross_entropy",
-        with_negatives: bool = False,
-        log_iter: int = 100,
-        initial_test: bool = True,
-        **kwargs
+            self,
+            loader: DataLoader,
+            stop_criterion: Union[int, StopCondition],
+            verbose: int = 1,
+            loss_function_name: str = "cross_entropy",
+            with_negatives: bool = False,
+            log_iter: int = 100,
+            initial_test: bool = True,
+            **kwargs
     ) -> Logger:
 
         self.previous_handler = signal.getsignal(signal.SIGINT)
@@ -102,7 +102,6 @@ class TrainObject(object):
         if hasattr(self.model.solver, "semiring"):
             loss_function = getattr(self.model.solver.semiring, loss_function_name)
         else:
-            # TODO
             loss_function = None
             use_storch_training = True
 
@@ -126,7 +125,10 @@ class TrainObject(object):
             self.model.optimizer.step_epoch()
             if verbose and epoch_size > log_iter:
                 print("Epoch", self.epoch + 1)
+
             for batch in loader:
+            #     break
+            # while True:
                 if self.interrupt:
                     break
                 self.i += 1
@@ -170,14 +172,14 @@ class TrainObject(object):
         return self.logger
 
     def log(
-        self, snapshot_iter=None, log_iter=100, test_iter=1000, verbose=1, **kwargs
+            self, snapshot_iter: int = None, log_iter=100, test_iter=1000, verbose=1, **kwargs
     ):
         iter_time = time.time()
 
         if (
-            "snapshot_name" in kwargs
-            and snapshot_iter is not None
-            and self.i % snapshot_iter == 0
+                "snapshot_name" in kwargs
+                and snapshot_iter is not None
+                and self.i % snapshot_iter == 0
         ):
             filename = "{}_iter_{}.mdl".format(kwargs["snapshot_name"], self.i)
             print("Writing snapshot to " + filename)
@@ -213,10 +215,10 @@ class TrainObject(object):
 
 
 def train_model(
-    model: Model,
-    loader: DataLoader,
-    stop_condition: Union[int, StopCondition],
-    **kwargs
+        model: Model,
+        loader: DataLoader,
+        stop_condition: Union[int, StopCondition],
+        **kwargs
 ) -> TrainObject:
     train_object = TrainObject(model)
     train_object.train(loader, stop_condition, **kwargs)

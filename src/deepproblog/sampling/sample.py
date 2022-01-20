@@ -41,23 +41,22 @@ limitations under the License.
 import logging
 import random
 import time
-from typing import Sequence, TYPE_CHECKING, Tuple, Dict, List
-
+import torch
 from problog.clausedb import ClauseDB
 from problog.engine_stack import FixedContext
-from problog.errors import process_error, GroundingError
-from problog.formula import LogicFormula
-from problog.logic import Term, Constant, ArithmeticError, term2list
-from problog.program import PrologFile, LogicProgram
-from problog.tasks.sample import init_db, RateCounter, init_engine, verify_evidence, sample_poisson, FunctionStore, \
-    SampledFormula
-from torch.distributions import Categorical, Distribution, OneHotCategorical
+from problog.errors import GroundingError
+from problog.logic import Term
+from problog.program import LogicProgram
+from problog.tasks.sample import init_db, init_engine, SampledFormula
+from torch.distributions import Distribution, OneHotCategorical
+from typing import Sequence, TYPE_CHECKING, Dict, List
 
+import storch
 from deepproblog.query import Query
 from deepproblog.semiring import Result
-from storch.method import Method
-import storch
-import torch
+from storch import StochasticTensor, CostTensor
+from storch.method import Baseline
+from storch.method.baseline import BatchAverageBaseline
 
 if TYPE_CHECKING:
     from deepproblog.model import Model
@@ -237,12 +236,26 @@ def init_db(engine, model: LogicProgram, propagate_evidence=False):
 
     return db, evidence_facts, ev_target
 
+class HybridBaseline(Baseline):
+    def __init__(self):
+        super().__init__()
+        self.batch_avg_baseline = BatchAverageBaseline()
+        # Const baseline of -0.1 since we want to punish whenever it samples all 0s
+        self.const = torch.tensor(-0.1)
 
-def factory_storch_method(n: int):
+    def compute_baseline(
+        self, tensor: StochasticTensor, cost_node: CostTensor
+    ) -> torch.Tensor:
+        if (cost_node._tensor < 0).any():
+            return self.batch_avg_baseline.compute_baseline(tensor, cost_node)
+        return self.const
+
+def factory_storch_method(n: int, name="hybrid-baseline"):
     def create_storch_method(atom_name: str):
-        return storch.method.ScoreFunction(atom_name, n_samples=n)
+        if name == 'hybrid-baseline':
+            return storch.method.ScoreFunction(atom_name, n_samples=n, baseline_factory=lambda s, c: HybridBaseline())
+        return storch.method.ScoreFunction(atom_name, n_samples=n, baseline_factory='batch-average')
     return create_storch_method
-
 
 
 # noinspection PyUnusedLocal
