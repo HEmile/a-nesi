@@ -147,6 +147,12 @@ class SampledFormulaDPL(SampledFormula):
                         # Compute probabilities by evaluating model
                         res: torch.Tensor = self.model.evaluate_nn(to_evaluate)[to_evaluate[0]]
                         distr: Distribution = OneHotCategorical(res)
+                        if random.randint(0, 20) == 1:
+                            print("Digit 1")
+                            print(res)
+                        if random.randint(0, 20) == 1:
+                            print("Digit 2")
+                            print(res)
 
                         # Sample using Storchastic
                         method = self.method_factory("z")
@@ -305,7 +311,7 @@ def estimate(model: "Model", program: ClauseDB, batch: Sequence[Query], n=0, pro
         estimates[queryS] = estimates[queryS] / query_counts
         found_proof = {queryS: found_proof}
         query_time = time.time() - start_time
-        results.append(Result(estimates, found_proof=found_proof, ground_time=query_time))
+        results.append(Result(estimates, found_proof=found_proof, ground_time=query_time, stoch_tensors=parents))
 
     return results
 

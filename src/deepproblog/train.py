@@ -1,5 +1,6 @@
 import signal
 import time
+import torch
 from typing import List, Callable, Union
 
 import storch
@@ -143,8 +144,13 @@ class TrainObject(object):
                         #  Also: Should they then be combined like this?
                         for q in r.found_proof:
                             storch.add_cost(r.found_proof[q], f'found_proof_{q}')
-                        prob_query = storch.backward()
-                        self.accumulated_loss += prob_query / len(result)
+                            self.accumulated_loss += torch.mean(r.found_proof[q]._tensor.double()) / len(result)
+
+                        # Apply entropy minimization (positive) or maximization (negative)
+                        # for s in r.stoch_tensors:
+                        #     storch.add_cost(-0.1*s.distribution.entropy(), f'entropy_{s.name}')
+                        storch.backward()
+                        # self.accumulated_loss += prob_query / len(result)
                 else:
                     if with_negatives:
                         loss = self.get_loss_with_negatives(batch, loss_function)

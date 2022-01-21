@@ -1,5 +1,5 @@
 from abc import ABC, abstractmethod
-from typing import Optional, Dict, Union
+from typing import Optional, Dict, Union, List
 
 import torch
 
@@ -62,6 +62,7 @@ class Result(object):
         eval_time: Optional[float] = None,
         proof: Optional[LogicFormula] = None,
         found_proof: Dict[Term, storch.Tensor] = None,
+        stoch_tensors: List[storch.StochasticTensor]=None
     ):
         """Construct object
 
@@ -84,6 +85,7 @@ class Result(object):
         self.eval_time = eval_time
         self.proof = proof
         self.found_proof = found_proof
+        self.stoch_tensors = stoch_tensors
 
     def __iter__(self):
         return iter(self.result.keys())
