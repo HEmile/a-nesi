@@ -263,10 +263,6 @@ def estimate(model: "Model", program: ClauseDB, batch: Sequence[Query], n=0, pro
     if not sampler:
         sampler = DefaultSampler(model)
 
-    for node in program.iter_nodes():
-        if type(node).__name__ == 'choice':
-            print(node)
-    print("-----------------------")
     for query in batch:
         estimates = defaultdict(float)
         start_time = time.time()
@@ -276,6 +272,8 @@ def estimate(model: "Model", program: ClauseDB, batch: Sequence[Query], n=0, pro
         queryS = query.substitute().query
         query_counts = 0
         # r = 0
+
+        sampler.prepare_sampler(query)
 
         # This map gets reused over multiple samples of the same query, so we do not query the NN model unnecessarily
         sample_map = {}
