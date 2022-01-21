@@ -49,10 +49,11 @@ from problog.logic import Term
 from problog.program import LogicProgram
 from problog.tasks.sample import init_db, init_engine, SampledFormula
 from torch.distributions import Distribution, OneHotCategorical
-from typing import Sequence, TYPE_CHECKING, Dict, List
+from typing import Sequence, TYPE_CHECKING, Dict, List, Optional
 
 import storch
 from deepproblog.query import Query
+from deepproblog.sampling.sampler import Sampler, DefaultSampler
 from deepproblog.semiring import Result
 from storch import StochasticTensor, CostTensor
 from storch.method import Baseline
@@ -66,9 +67,10 @@ if TYPE_CHECKING:
 class SampledFormulaDPL(SampledFormula):
     model: "Model"
 
-    def __init__(self, model: "Model", sample_map: Dict[Term, storch.StochasticTensor], method_factory, query_counts: int, **kwargs):
+    def __init__(self, model: "Model", sampler: Sampler, sample_map: Dict[Term, storch.StochasticTensor], method_factory, query_counts: int, **kwargs):
         SampledFormula.__init__(self, **kwargs)
         self.model = model
+        self.sampler = sampler
         self.sample_map: Dict[Term, storch.StochasticTensor] = sample_map
         self.method_factory = method_factory
         self.query_counts = query_counts
@@ -143,20 +145,7 @@ class SampledFormulaDPL(SampledFormula):
                     # TODO: This now assumes a categorical distribution. What about bernoulli?
                     name = Term(probability.args[0], probability.args[1])
                     if name not in self.sample_map:
-                        to_evaluate = [(probability.args[0], probability.args[1])]
-                        # Compute probabilities by evaluating model
-                        res: torch.Tensor = self.model.evaluate_nn(to_evaluate)[to_evaluate[0]]
-                        distr: Distribution = OneHotCategorical(res)
-                        if random.randint(0, 20) == 1:
-                            print("Digit 1")
-                            print(res)
-                        if random.randint(0, 20) == 1:
-                            print("Digit 2")
-                            print(res)
-
-                        # Sample using Storchastic
-                        method = self.method_factory("z")
-                        sample = method.sample(distr)
+                        sample = self.sampler.get_sample(probability, self.method_factory("z"))
                         self.sample_map[name] = sample
                     sample = self.sample_map[name]
                     # Lookup sample in sampled storch.Tensor
@@ -265,12 +254,19 @@ def factory_storch_method(n: int, name="hybrid-baseline"):
 
 
 # noinspection PyUnusedLocal
-def estimate(model: "Model", program: ClauseDB, batch: Sequence[Query], n=0, propagate_evidence=False, **kwdargs) -> List[Result]:
+def estimate(model: "Model", program: ClauseDB, batch: Sequence[Query], n=0, propagate_evidence=False, sampler: Optional[Sampler]=None, **kwdargs) -> List[Result]:
     # Initial version will not support evidence propagation.
     from collections import defaultdict
 
     results = []
 
+    if not sampler:
+        sampler = DefaultSampler(model)
+
+    for node in program.iter_nodes():
+        if type(node).__name__ == 'choice':
+            print(node)
+    print("-----------------------")
     for query in batch:
         estimates = defaultdict(float)
         start_time = time.time()
@@ -280,14 +276,15 @@ def estimate(model: "Model", program: ClauseDB, batch: Sequence[Query], n=0, pro
         queryS = query.substitute().query
         query_counts = 0
         # r = 0
-        # This map gets reused over multiple sample of the same query, so we do not query the NN model unnecessarily
+
+        # This map gets reused over multiple samples of the same query, so we do not query the NN model unnecessarily
         sample_map = {}
         costs = []
         while n == 0 or query_counts < n:
-            target = SampledFormulaDPL(model, sample_map, factory_storch_method(n), query_counts)
+            target = SampledFormulaDPL(model, sampler, sample_map, factory_storch_method(n), query_counts)
             # for ev_fact in evidence:
             #     target.add_atom(*ev_fact)
-            result: SampledFormulaDPL = ground(engine, db, query.substitute().query, target=target)
+            result: SampledFormulaDPL = ground(engine, db, queryS, target=target)
 
             for name, truth_value in result.queries():
                 # Note: We are minimizing, so we have negative numbers for good results!

@@ -6,6 +6,7 @@ from deepproblog.arithmetic_circuit import ArithmeticCircuit
 from deepproblog.engines import Engine
 from deepproblog.query import Query
 from deepproblog.sampling.sample import estimate
+from deepproblog.sampling.sampler import Sampler
 from deepproblog.semiring import Result
 from deepproblog.semiring.graph_semiring import GraphSemiring, Semiring
 from deepproblog.utils.cache import Cache
@@ -14,6 +15,7 @@ from problog.logic import Term
 
 if TYPE_CHECKING:
     from deepproblog.model import Model
+    from deepproblog.engines.mc_engine import MCEngine
 
 
 class SolverException(Exception):
@@ -125,14 +127,14 @@ class MCSolver(Solver):
     def __init__(
         self,
         model: "Model",
-        engine: Engine
+        engine: "MCEngine",
     ):
         """
 
         :param model: The model in which queries will be evaluated.
         :param engine: The engine that will be used to ground queries.
         """
-        self.engine = engine
+        self.engine: "MCEngine" = engine
         self.model = model
         self.program = self.engine.prepare(model.program)
 
@@ -144,6 +146,6 @@ class MCSolver(Solver):
         """
         self.engine.tensor_store.clear()
 
-        results = estimate(self.model, self.program, batch, n=3)
+        results = estimate(self.model, self.program, batch, n=3, sampler=self.engine.sampler)
 
         return results

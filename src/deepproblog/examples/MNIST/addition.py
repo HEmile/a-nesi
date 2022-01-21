@@ -7,12 +7,13 @@ from deepproblog.dataset import DataLoader
 from deepproblog.engines import ApproximateEngine, ExactEngine
 from deepproblog.engines.mc_engine import MCEngine
 from deepproblog.evaluate import get_confusion_matrix
-from deepproblog.examples.MNIST.network import MNIST_Net
+from deepproblog.examples.MNIST.network import MNIST_Net, MNIST_NETWORK_NAME
 from deepproblog.examples.MNIST.data import (
     MNIST_train,
     MNIST_test,
     addition,
 )
+from deepproblog.examples.MNIST.sampler import AdditionSampler
 from deepproblog.heuristics import geometric_mean
 from deepproblog.model import Model
 from deepproblog.network import Network
@@ -46,7 +47,7 @@ if pretrain is not None and pretrain > 0:
     network.load_state_dict(
         torch.load("models/pretrained/all_{}.pth".format(configuration["pretrain"]))
     )
-net = Network(network, "mnist_net", batching=True)
+net = Network(network, MNIST_NETWORK_NAME, batching=True)
 net.optimizer = torch.optim.Adam(network.parameters(), lr=1e-3)
 
 model = Model("models/addition.pl", [net])
@@ -63,7 +64,8 @@ elif configuration["method"] == "gm":
     )
 elif configuration["method"] == "mc":
     model.set_engine(
-        MCEngine(model)
+        # MCEngine(model)
+        MCEngine(model, AdditionSampler(model))
     )
 model.add_tensor_source("train", MNIST_train)
 model.add_tensor_source("test", MNIST_test)

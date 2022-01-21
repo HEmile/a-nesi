@@ -1,6 +1,8 @@
 import torch.nn as nn
 
 
+MNIST_NETWORK_NAME = 'mnist-net'
+
 class MNIST_CNN(nn.Module):
     def __init__(self):
         super(MNIST_CNN, self).__init__()
