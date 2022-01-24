@@ -49,45 +49,43 @@ from problog.logic import Term
 from problog.program import LogicProgram
 from problog.tasks.sample import init_db, init_engine, SampledFormula
 from torch.distributions import Distribution, OneHotCategorical
-from typing import Sequence, TYPE_CHECKING, Dict, List, Optional
+from typing import Sequence, TYPE_CHECKING, Dict, List, Optional, Callable, Protocol
 
 import storch
 from deepproblog.query import Query
-from deepproblog.sampling.sampler import Sampler, DefaultSampler
+from deepproblog.sampling.sampler import Sampler, IndependentSampler
 from deepproblog.semiring import Result
 from storch import StochasticTensor, CostTensor
-from storch.method import Baseline
+from storch.method import Baseline, Method
 from storch.method.baseline import BatchAverageBaseline
 
 if TYPE_CHECKING:
     from deepproblog.model import Model
 
 
-
 class SampledFormulaDPL(SampledFormula):
     model: "Model"
 
-    def __init__(self, model: "Model", sampler: Sampler, sample_map: Dict[Term, storch.StochasticTensor], method_factory, query_counts: int, **kwargs):
+    def __init__(self, model: "Model", sampler: Sampler, sample_map: Dict[Term, storch.StochasticTensor],
+                 query_counts: int, **kwargs):
         SampledFormula.__init__(self, **kwargs)
         self.model = model
         self.sampler = sampler
         self.sample_map: Dict[Term, storch.StochasticTensor] = sample_map
-        self.method_factory = method_factory
         self.query_counts = query_counts
-
 
     def _is_nn_probability(self, probability: Term):
         return probability.functor == "nn"
 
     def add_atom(
-        self,
-        identifier: Term,
-        probability: Term,
-        group: (int, FixedContext)=None,
-        name: Term=None,
-        source=None,
-        cr_extra=True,
-        is_extra=False,
+            self,
+            identifier: Term,
+            probability: Term,
+            group: (int, FixedContext) = None,
+            name: Term = None,
+            source=None,
+            cr_extra=True,
+            is_extra=False,
     ):
         # def add_atom(self, identifier, probability, group=None, name=None, source=None):
         if probability is None:
@@ -145,7 +143,7 @@ class SampledFormulaDPL(SampledFormula):
                     # TODO: This now assumes a categorical distribution. What about bernoulli?
                     name = Term(probability.args[0], probability.args[1])
                     if name not in self.sample_map:
-                        sample = self.sampler.get_sample(probability, self.method_factory("z"))
+                        sample = self.sampler.get_sample(probability)
                         self.sample_map[name] = sample
                     sample = self.sample_map[name]
                     # Lookup sample in sampled storch.Tensor
@@ -173,7 +171,6 @@ class SampledFormulaDPL(SampledFormula):
                 return self.facts[identifier]
 
 
-
 def ground(engine, db, query: Term, target, assume_prepared=True) -> SampledFormulaDPL:
     db = engine.prepare(db)
 
@@ -198,7 +195,6 @@ def ground(engine, db, query: Term, target, assume_prepared=True) -> SampledForm
     target = engine.ground(db, query, target, label=target.LABEL_QUERY, assume_prepared=assume_prepared)
     logger.debug("Ground program size: %s", len(target))
     return target
-
 
 
 def init_db(engine, model: LogicProgram, propagate_evidence=False):
@@ -231,37 +227,17 @@ def init_db(engine, model: LogicProgram, propagate_evidence=False):
 
     return db, evidence_facts, ev_target
 
-class HybridBaseline(Baseline):
-    def __init__(self):
-        super().__init__()
-        self.batch_avg_baseline = BatchAverageBaseline()
-        # Const baseline of -0.1 since we want to punish whenever it samples all 0s
-        self.const = torch.tensor(-0.1)
 
-    def compute_baseline(
-        self, tensor: StochasticTensor, cost_node: CostTensor
-    ) -> torch.Tensor:
-        if (cost_node._tensor < 0).any():
-            return self.batch_avg_baseline.compute_baseline(tensor, cost_node)
-        return self.const
 
-def factory_storch_method(n: int, name="hybrid-baseline"):
-    def create_storch_method(atom_name: str):
-        if name == 'hybrid-baseline':
-            return storch.method.ScoreFunction(atom_name, n_samples=n, baseline_factory=lambda s, c: HybridBaseline())
-        return storch.method.ScoreFunction(atom_name, n_samples=n, baseline_factory='batch-average')
-    return create_storch_method
 
 
 # noinspection PyUnusedLocal
-def estimate(model: "Model", program: ClauseDB, batch: Sequence[Query], n=0, propagate_evidence=False, sampler: Optional[Sampler]=None, **kwdargs) -> List[Result]:
+def estimate(model: "Model", program: ClauseDB, batch: Sequence[Query],
+             sampler: Sampler, propagate_evidence=False, **kwdargs) -> List[Result]:
     # Initial version will not support evidence propagation.
     from collections import defaultdict
 
     results = []
-
-    if not sampler:
-        sampler = DefaultSampler(model)
 
     for query in batch:
         estimates = defaultdict(float)
@@ -278,8 +254,8 @@ def estimate(model: "Model", program: ClauseDB, batch: Sequence[Query], n=0, pro
         # This map gets reused over multiple samples of the same query, so we do not query the NN model unnecessarily
         sample_map = {}
         costs = []
-        while n == 0 or query_counts < n:
-            target = SampledFormulaDPL(model, sampler, sample_map, factory_storch_method(n), query_counts)
+        while query_counts < sampler.n:
+            target = SampledFormulaDPL(model, sampler, sample_map, query_counts)
             # for ev_fact in evidence:
             #     target.add_atom(*ev_fact)
             result: SampledFormulaDPL = ground(engine, db, queryS, target=target)
@@ -309,7 +285,3 @@ def estimate(model: "Model", program: ClauseDB, batch: Sequence[Query], n=0, pro
         results.append(Result(estimates, found_proof=found_proof, ground_time=query_time, stoch_tensors=parents))
 
     return results
-
-
-
-

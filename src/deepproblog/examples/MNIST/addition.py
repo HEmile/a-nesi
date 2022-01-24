@@ -17,6 +17,7 @@ from deepproblog.examples.MNIST.sampler import AdditionSampler
 from deepproblog.heuristics import geometric_mean
 from deepproblog.model import Model
 from deepproblog.network import Network
+from deepproblog.sampling.grad_estim import factory_storch_method
 from deepproblog.train import train_model
 from deepproblog.utils import get_configuration, format_time_precise, config_to_string
 
@@ -65,7 +66,7 @@ elif configuration["method"] == "gm":
 elif configuration["method"] == "mc":
     model.set_engine(
         # MCEngine(model)
-        MCEngine(model, AdditionSampler(model))
+        MCEngine(model, AdditionSampler(model, factory_storch_method(), 2))
     )
 model.add_tensor_source("train", MNIST_train)
 model.add_tensor_source("test", MNIST_test)
