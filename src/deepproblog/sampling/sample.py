@@ -148,11 +148,13 @@ class SampledFormulaDPL(SampledFormula):
                     sample = self.sample_map[name]
                     # Lookup sample in sampled storch.Tensor
                     distr = sample.distribution
-                    if sample.n == 1:
+                    if self.sampler.n == 1:
                         detach_sample = sample._tensor
                     else:
                         detach_sample: torch.Tensor = sample._tensor[self.query_counts]
                     prob = distr.log_prob(detach_sample).exp()
+                    if isinstance(prob, storch.Tensor):
+                        prob = prob._tensor
                     prob = prob.detach().numpy()
                     self.probability *= prob
                     self.sample_map[name] = sample

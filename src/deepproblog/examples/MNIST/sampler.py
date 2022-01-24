@@ -47,8 +47,9 @@ class AdditionSampler(Sampler):
         target = query.query.args[query.output_ind[0]]
         oh_target = one_hot(torch.tensor(int(target)), self.max_classes)
 
-        cat_in = torch.cat([dist1, dist2, oh_target])
-        self.embedding = self.lin1(cat_in)
+        # Detach tensors to ensure importance sampler doesnt train it
+        cat_in = torch.cat([dist1.detach(), dist2.detach(), oh_target])
+        self.embedding = storch.Tensor(self.lin1(cat_in), [], [])
         print(self.embedding)
 
         # TODO:
@@ -66,7 +67,7 @@ class AdditionSampler(Sampler):
             self.sample1 = method(distr1)
             return self.sample1
         else:
-            distr2 = OneHotCategorical(logits=self.outp2(torch.cat([self.embedding.unsqueeze(0), self.sample1])))
+            distr2 = OneHotCategorical(logits=self.outp2(storch.cat([self.embedding, self.sample1], dim=-1)))
 
             method = self.method_factory(str(term), 1)
             sample2 = method(distr2)
