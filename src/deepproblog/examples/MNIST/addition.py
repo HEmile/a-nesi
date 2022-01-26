@@ -31,6 +31,7 @@ parameters = {
     "exploration": [False, True],
     "run": range(5),
 }
+batch_size = 2
 
 configuration = get_configuration(parameters, i)
 torch.manual_seed(configuration["run"])
@@ -66,12 +67,12 @@ elif configuration["method"] == "gm":
 elif configuration["method"] == "mc":
     model.set_engine(
         # MCEngine(model)
-        MCEngine(model, AdditionSampler(model, factory_storch_method(), 2))
+        MCEngine(model, AdditionSampler(model, factory_storch_method(), 3))
     )
 model.add_tensor_source("train", MNIST_train)
 model.add_tensor_source("test", MNIST_test)
 
-loader = DataLoader(train_set, 2, False)
+loader = DataLoader(train_set, batch_size, False)
 train = train_model(model, loader, 1, log_iter=100, profile=0)
 model.save_state("snapshot/" + name + ".pth")
 train.logger.comment(dumps(model.get_hyperparameters()))

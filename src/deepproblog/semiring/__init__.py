@@ -62,7 +62,8 @@ class Result(object):
         eval_time: Optional[float] = None,
         proof: Optional[LogicFormula] = None,
         found_proof: Dict[Term, storch.Tensor] = None,
-        stoch_tensors: List[storch.StochasticTensor]=None
+        stoch_tensors: List[storch.StochasticTensor]=None,
+        is_batched: bool=True
     ):
         """Construct object
 
@@ -86,6 +87,7 @@ class Result(object):
         self.proof = proof
         self.found_proof = found_proof
         self.stoch_tensors = stoch_tensors
+        self.is_batched = is_batched
 
     def __iter__(self):
         return iter(self.result.keys())

@@ -67,12 +67,13 @@ class SampledFormulaDPL(SampledFormula):
     model: "Model"
 
     def __init__(self, model: "Model", sampler: Sampler, sample_map: Dict[Term, storch.StochasticTensor],
-                 query_counts: int, **kwargs):
+                 query_counts: int, batch_counts: int, **kwargs):
         SampledFormula.__init__(self, **kwargs)
         self.model = model
         self.sampler = sampler
         self.sample_map: Dict[Term, storch.StochasticTensor] = sample_map
         self.query_counts = query_counts
+        self.batch_counts = batch_counts
 
     def _is_nn_probability(self, probability: Term):
         return probability.functor == "nn"
@@ -146,12 +147,15 @@ class SampledFormulaDPL(SampledFormula):
                         sample = self.sampler.get_sample(probability)
                         self.sample_map[name] = sample
                     sample = self.sample_map[name]
+                    batch_first = sample.plates[0].name == 'batch'
                     # Lookup sample in sampled storch.Tensor
                     distr = sample.distribution
                     if self.sampler.n == 1:
-                        detach_sample = sample._tensor
+                        detach_sample = sample._tensor[self.batch_counts]
+                    elif batch_first:
+                        detach_sample = sample._tensor[self.batch_counts][self.query_counts]
                     else:
-                        detach_sample: torch.Tensor = sample._tensor[self.query_counts]
+                        detach_sample = sample._tensor[self.query_counts][self.batch_counts]
                     prob = distr.log_prob(detach_sample).exp()
                     if isinstance(prob, storch.Tensor):
                         prob = prob._tensor
@@ -230,9 +234,6 @@ def init_db(engine, model: LogicProgram, propagate_evidence=False):
     return db, evidence_facts, ev_target
 
 
-
-
-
 # noinspection PyUnusedLocal
 def estimate(model: "Model", program: ClauseDB, batch: Sequence[Query],
              sampler: Sampler, propagate_evidence=False, **kwdargs) -> List[Result]:
@@ -240,10 +241,15 @@ def estimate(model: "Model", program: ClauseDB, batch: Sequence[Query],
     from collections import defaultdict
 
     results = []
+    all_costs = []
 
-    for query in batch:
-        estimates = defaultdict(float)
-        start_time = time.time()
+    # TODO: Calculate how long this takes
+    sampler.prepare_sampler(batch)
+    # This map gets reused over multiple samples of the same query, so we do not query the NN model unnecessarily
+    sample_map: Dict[Term, storch.StochasticTensor] = {}
+    estimates = defaultdict(float)
+    start_time = time.time()
+    for batch_count, query in enumerate(batch):
         engine = init_engine(**kwdargs)
         db, evidence, ev_target = init_db(engine, program, propagate_evidence)
 
@@ -251,13 +257,15 @@ def estimate(model: "Model", program: ClauseDB, batch: Sequence[Query],
         query_counts = 0
         # r = 0
 
-        sampler.prepare_sampler(query)
+        if not sampler.is_batched():
+            start_time = time.time()
+            sample_map = {}
+            estimates = defaultdict(float)
 
-        # This map gets reused over multiple samples of the same query, so we do not query the NN model unnecessarily
-        sample_map = {}
         costs = []
         while query_counts < sampler.n:
-            target = SampledFormulaDPL(model, sampler, sample_map, query_counts)
+            # TODO: If not batched, ensure it gets result correctly
+            target = SampledFormulaDPL(model, sampler, sample_map, query_counts, batch_count)
             # for ev_fact in evidence:
             #     target.add_atom(*ev_fact)
             result: SampledFormulaDPL = ground(engine, db, queryS, target=target)
@@ -277,13 +285,27 @@ def estimate(model: "Model", program: ClauseDB, batch: Sequence[Query],
         #     logging.getLogger("problog_sample").info("Rejected samples: %s" % r)
 
         assert len(sample_map) > 0
-        cost_tensor = torch.tensor(costs)
-        parents: [storch.Tensor] = list(sample_map.values())
-        found_proof = storch.Tensor(cost_tensor, parents, parents[0].plates, "found_proof")
+        all_costs.append(costs)
 
         estimates[queryS] = estimates[queryS] / query_counts
-        found_proof = {queryS: found_proof}
+        if not sampler.is_batched():
+            query_time = time.time() - start_time
+            parents: [storch.Tensor] = list(sample_map.values())
+            cost_tensor = torch.tensor(costs)
+            found_proof = storch.Tensor(cost_tensor, parents, parents[-1].plates, "found_proof")
+            found_proof = {queryS: found_proof}
+            results.append(Result(estimates, found_proof=found_proof, ground_time=query_time, stoch_tensors=parents, is_batched=False))
+
+    if sampler.is_batched():
         query_time = time.time() - start_time
-        results.append(Result(estimates, found_proof=found_proof, ground_time=query_time, stoch_tensors=parents))
+        parents: [storch.StochasticTensor] = list(sample_map.values())
+        cost_tensor = torch.tensor(all_costs)
+        plates = parents[-1].plates
+        batch_first = plates[0].name == 'batch'
+        if not batch_first:
+            cost_tensor = cost_tensor.T
+        # TODO: May not work if the sampling method has more than 2 dimensions
+        found_proof = storch.Tensor(cost_tensor, parents, plates, "found_proof")
+        results.append(Result(estimates, found_proof = found_proof, ground_time=query_time, stoch_tensors=parents, is_batched=True))
 
     return results

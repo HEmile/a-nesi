@@ -139,12 +139,15 @@ class TrainObject(object):
                     # TODO: No loss for negatives
                     result = self.model.solve(batch)
                     for r in result:
-                        assert r.found_proof
+                        assert r.found_proof is not None
                         # TODO: Can there ever be multiple keys? (ie multiple queries?
                         #  Also: Should they then be combined like this?
-                        for q in r.found_proof:
-                            storch.add_cost(r.found_proof[q], f'found_proof_{q}')
-                            self.accumulated_loss += torch.mean(r.found_proof[q]._tensor.double()) / len(result)
+                        if r.is_batched:
+                            storch.add_cost(r.found_proof, 'found_proof_c')
+                        else:
+                            for q in r.found_proof:
+                                storch.add_cost(r.found_proof[q], f'found_proof_{q}')
+                                self.accumulated_loss += torch.mean(r.found_proof[q]._tensor.double()) / len(result)
 
                         # Apply entropy minimization (positive) or maximization (negative)
                         # for s in r.stoch_tensors:

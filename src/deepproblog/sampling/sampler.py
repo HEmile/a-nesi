@@ -1,4 +1,4 @@
-from typing import TYPE_CHECKING, Callable
+from typing import TYPE_CHECKING, Callable, Sequence
 
 import random
 
@@ -23,17 +23,20 @@ class Sampler(torch.nn.Module):
         self.method_factory: "MethodFactory" = method_factory
         self.n = n
 
-    def prepare_sampler(self, query: Query):
+    def prepare_sampler(self, queries: Sequence[Query]):
         pass
 
-    def __call__(self, query: Query):
-        self.prepare_sampler(query)
+    def __call__(self, queries: Sequence[Query]):
+        self.prepare_sampler(queries)
 
     def get_sample(self, term: Term) -> StochasticTensor:
         pass
 
     def update_sampler(self, found_results: torch.Tensor):
         pass
+
+    def is_batched(self) -> bool:
+        return True
 
 class IndependentSampler(Sampler):
 
@@ -54,3 +57,6 @@ class IndependentSampler(Sampler):
         # Sample using Storchastic
         method = self.method_factory("z", self.n)
         return method.sample(distr)
+
+    def is_batched(self) -> bool:
+        return False
