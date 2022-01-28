@@ -6,7 +6,7 @@ from collections import defaultdict
 from io import BytesIO
 from os import PathLike
 from random import random
-from typing import Collection, Optional, Tuple, List, Mapping, Any, Sequence, Union
+from typing import Collection, Optional, Tuple, List, Mapping, Any, Sequence, Union, Dict
 from zipfile import ZipFile
 
 import torch
@@ -41,7 +41,7 @@ class Model(object):
         :param load: If true, then it will attempt to load the program from 'program_string',
          else, it will consider program_string to be the program itself.
         """
-        self.networks = dict()
+        self.networks: Dict[str, Network] = dict()
         if load:
             self.program: LogicProgram = PrologFile(str(program_string))
         else:

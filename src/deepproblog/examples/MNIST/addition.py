@@ -32,6 +32,7 @@ parameters = {
     "run": range(5),
 }
 batch_size = 2
+amt_samples = 3
 
 configuration = get_configuration(parameters, i)
 torch.manual_seed(configuration["run"])
@@ -49,10 +50,11 @@ if pretrain is not None and pretrain > 0:
     network.load_state_dict(
         torch.load("models/pretrained/all_{}.pth".format(configuration["pretrain"]))
     )
-net = Network(network, MNIST_NETWORK_NAME, batching=True)
-net.optimizer = torch.optim.Adam(network.parameters(), lr=1e-3)
-
+sampler = AdditionSampler(factory_storch_method(), amt_samples) if configuration["method"] == "mc" else None
+net = Network(network, MNIST_NETWORK_NAME, sampler=sampler, batching=True)
 model = Model("models/addition.pl", [net])
+
+net.optimizer = torch.optim.Adam(net.parameters(), lr=1e-3)
 if configuration["method"] == "exact":
     if configuration["exploration"] or configuration["N"] > 2:
         print("Not supported?")
@@ -66,8 +68,7 @@ elif configuration["method"] == "gm":
     )
 elif configuration["method"] == "mc":
     model.set_engine(
-        # MCEngine(model)
-        MCEngine(model, AdditionSampler(model, factory_storch_method(), 3))
+        MCEngine(model)
     )
 model.add_tensor_source("train", MNIST_train)
 model.add_tensor_source("test", MNIST_test)

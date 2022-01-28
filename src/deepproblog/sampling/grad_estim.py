@@ -1,6 +1,7 @@
 from typing import Protocol, Optional
 
 import torch
+import storch
 
 from storch import CostTensor, StochasticTensor
 from storch.method import Baseline, Method, ScoreFunction
@@ -18,9 +19,10 @@ class HybridBaseline(Baseline):
     def compute_baseline(
             self, tensor: StochasticTensor, cost_node: CostTensor
     ) -> torch.Tensor:
-        if (cost_node._tensor < 0).any():
-            return self.batch_avg_baseline.compute_baseline(tensor, cost_node)
-        return self.const
+        # TODO: Assumes the count over amt samples is z
+        cond = (storch.sum(cost_node, "z") < 0).float()
+        avg_baseline = self.batch_avg_baseline.compute_baseline(tensor, cost_node)
+        return avg_baseline * cond + self.const * (1-cond)
 
 
 # Super cool type hinting trix https://stackoverflow.com/questions/68386130/how-to-type-hint-a-callable-of-a-function-with-default-arguments

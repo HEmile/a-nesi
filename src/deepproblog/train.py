@@ -128,7 +128,7 @@ class TrainObject(object):
                 print("Epoch", self.epoch + 1)
 
             for batch in loader:
-            #     break
+                # break
             # while True:
                 if self.interrupt:
                     break
@@ -144,6 +144,7 @@ class TrainObject(object):
                         #  Also: Should they then be combined like this?
                         if r.is_batched:
                             storch.add_cost(r.found_proof, 'found_proof_c')
+                            self.accumulated_loss += torch.mean(r.found_proof._tensor.double())
                         else:
                             for q in r.found_proof:
                                 storch.add_cost(r.found_proof[q], f'found_proof_{q}')

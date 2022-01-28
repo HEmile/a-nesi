@@ -5,6 +5,9 @@ from typing import Any, Dict, IO, Iterator, Optional, Union, List
 
 import torch
 
+from deepproblog.sampling.sampler import Sampler
+from itertools import chain
+
 
 def get_tensor_function(network: Network):
     def tensor_function(*args):
@@ -19,6 +22,7 @@ class Network(object):
         network_module: torch.nn.Module,
         name: str,
         optimizer: Optional[torch.optim.Optimizer] = None,
+        sampler: Optional[Sampler] = None,
         scheduler=None,
         k: Optional[int] = None,
         batching: bool = False,
@@ -39,6 +43,9 @@ class Network(object):
         # if function is None:
         self.function = get_tensor_function(self)
         self.optimizer = optimizer
+        self.sampler = sampler
+        if self.sampler:
+            self.sampler.network_name = name
         self.scheduler = scheduler
         self.model = None
         self.is_cuda = False
@@ -51,7 +58,7 @@ class Network(object):
         self.batching = batching
         self.det = False
 
-    def zero_grad(self):
+    def zero_grad(self) -> None:
         """
         Call zero grad on the optimizer
         :return:
@@ -64,9 +71,11 @@ class Network(object):
         Return the parameters of the network module
         :return:
         """
+        if self.sampler:
+            return chain(self.network_module.parameters(), self.sampler.parameters())
         return self.network_module.parameters()
 
-    def step(self):
+    def step(self) -> None:
         """
         Call the step function of the optimizer
         :return:
@@ -149,6 +158,8 @@ class Network(object):
         Set the network to eval mode.
         """
         self.network_module.eval()
+        if self.sampler:
+            self.sampler.eval()
         self.eval_mode = True
 
     def train(self):
@@ -156,15 +167,19 @@ class Network(object):
         Set the network to train mode.
         """
         self.network_module.train()
+        if self.sampler:
+            self.sampler.train()
         self.eval_mode = False
 
-    def get_hyperparameters(self):
+    def get_hyperparameters(self) -> dict:
         parameters = {
             "name": self.name,
             "module": str(self.network_module),
             "optimizer": str(self.optimizer),
             "k": self.k,
         }
+        if self.sampler:
+            parameters["sampler"] = self.sampler.get_hyperparameters()
         return parameters
 
 

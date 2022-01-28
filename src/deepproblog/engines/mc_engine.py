@@ -12,10 +12,10 @@ EXTERN = "{}_extern_nocache_"
 class MCEngine(ExactEngine):
     def __init__(self, model: Model, sampler: Optional[Sampler]=None):
         super().__init__(model)
-        self.sampler = sampler
-        if not sampler:
-            self.sampler = IndependentSampler(model, factory_storch_method(), 3)
-
+        for network in model.networks.values():
+            if not network.sampler:
+                network.sampler = IndependentSampler(factory_storch_method(), 3)
+            network.sampler.model = model
 
     def use_circuits(self) -> bool:
         return False

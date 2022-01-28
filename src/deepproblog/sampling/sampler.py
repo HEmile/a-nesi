@@ -17,9 +17,10 @@ if TYPE_CHECKING:
 
 
 class Sampler(torch.nn.Module):
-    def __init__(self, model: "Model", method_factory: "MethodFactory", n: int):
+    model: "Model"
+    network_name: str
+    def __init__(self, method_factory: "MethodFactory", n: int):
         super().__init__()
-        self.model = model
         self.method_factory: "MethodFactory" = method_factory
         self.n = n
 
@@ -37,6 +38,11 @@ class Sampler(torch.nn.Module):
 
     def is_batched(self) -> bool:
         return True
+
+    def get_hyperparameters(self) -> dict:
+        return {
+            "n": self.n,
+        }
 
 class IndependentSampler(Sampler):
 
@@ -60,3 +66,8 @@ class IndependentSampler(Sampler):
 
     def is_batched(self) -> bool:
         return False
+
+    def get_hyperparameters(self) -> dict:
+        hps = super().get_hyperparameters()
+        hps["type"] = "independent"
+        return hps

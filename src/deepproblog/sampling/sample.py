@@ -236,7 +236,7 @@ def init_db(engine, model: LogicProgram, propagate_evidence=False):
 
 # noinspection PyUnusedLocal
 def estimate(model: "Model", program: ClauseDB, batch: Sequence[Query],
-             sampler: Sampler, propagate_evidence=False, **kwdargs) -> List[Result]:
+             propagate_evidence=False, **kwdargs) -> List[Result]:
     # Initial version will not support evidence propagation.
     from collections import defaultdict
 
@@ -244,11 +244,15 @@ def estimate(model: "Model", program: ClauseDB, batch: Sequence[Query],
     all_costs = []
 
     # TODO: Calculate how long this takes
-    sampler.prepare_sampler(batch)
+    start_time = time.time()
+    # TODO: What if there are multiple networks + samplers?
+    for network in model.networks.values():
+        sampler = network.sampler
+        sampler.prepare_sampler(batch)
+        break
     # This map gets reused over multiple samples of the same query, so we do not query the NN model unnecessarily
     sample_map: Dict[Term, storch.StochasticTensor] = {}
     estimates = defaultdict(float)
-    start_time = time.time()
     for batch_count, query in enumerate(batch):
         engine = init_engine(**kwdargs)
         db, evidence, ev_target = init_db(engine, program, propagate_evidence)
@@ -304,6 +308,7 @@ def estimate(model: "Model", program: ClauseDB, batch: Sequence[Query],
         batch_first = plates[0].name == 'batch'
         if not batch_first:
             cost_tensor = cost_tensor.T
+        sampler.update_sampler(cost_tensor)
         # TODO: May not work if the sampling method has more than 2 dimensions
         found_proof = storch.Tensor(cost_tensor, parents, plates, "found_proof")
         results.append(Result(estimates, found_proof = found_proof, ground_time=query_time, stoch_tensors=parents, is_batched=True))
