@@ -1,3 +1,5 @@
+import os
+
 import sys
 from json import dumps
 
@@ -21,6 +23,7 @@ from deepproblog.sampling.grad_estim import factory_storch_method
 from deepproblog.train import train_model
 from deepproblog.utils import get_configuration, format_time_precise, config_to_string
 
+print(os.cpu_count())
 # I suppose this is done to enumerate the possible configurations?
 i = int(sys.argv[1]) if len(sys.argv) > 1 else 0
 
@@ -31,8 +34,9 @@ parameters = {
     "exploration": [False, True],
     "run": range(5),
 }
-batch_size = 2
-amt_samples = 3
+batch_size = 10
+amt_samples = 10
+lr = 1e-3
 
 configuration = get_configuration(parameters, i)
 torch.manual_seed(configuration["run"])
@@ -54,7 +58,7 @@ sampler = AdditionSampler(factory_storch_method(), amt_samples) if configuration
 net = Network(network, MNIST_NETWORK_NAME, sampler=sampler, batching=True)
 model = Model("models/addition.pl", [net])
 
-net.optimizer = torch.optim.Adam(net.parameters(), lr=1e-3)
+net.optimizer = torch.optim.Adam(net.parameters(), lr=lr)
 if configuration["method"] == "exact":
     if configuration["exploration"] or configuration["N"] > 2:
         print("Not supported?")

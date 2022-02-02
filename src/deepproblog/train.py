@@ -21,6 +21,7 @@ class TrainObject(object):
         self.model = model
         self.logger = Logger()
         self.accumulated_loss = 0
+        self.IS_probability = 0
         self.i = 1
         self.start = 0
         self.prev_iter_time = 0
@@ -107,6 +108,7 @@ class TrainObject(object):
             use_storch_training = True
 
         self.accumulated_loss = 0
+        self.IS_probability = 0
         self.timing = [0, 0, 0]
         self.epoch = 0
         self.start = time.time()
@@ -128,7 +130,7 @@ class TrainObject(object):
                 print("Epoch", self.epoch + 1)
 
             for batch in loader:
-                # break
+            #     break
             # while True:
                 if self.interrupt:
                     break
@@ -144,7 +146,9 @@ class TrainObject(object):
                         #  Also: Should they then be combined like this?
                         if r.is_batched:
                             storch.add_cost(r.found_proof, 'found_proof_c')
-                            self.accumulated_loss += torch.mean(r.found_proof._tensor.double())
+                            self.accumulated_loss += storch.reduce_plates(r.found_proof.float())._tensor.data
+                            # TODO: IS Probability
+                            self.IS_probability += torch.mean(r.found_proof._tensor.double())
                         else:
                             for q in r.found_proof:
                                 storch.add_cost(r.found_proof[q], f'found_proof_{q}')
@@ -201,6 +205,9 @@ class TrainObject(object):
                 "\ts:%.4f" % (iter_time - self.prev_iter_time),
                 "\tAverage Loss: ",
                 self.accumulated_loss / log_iter,
+                "\tIS Loss:",
+                self.IS_probability / log_iter,
+                flush=True
             )
             if len(self.model.parameters):
                 print("\t".join(str(parameter) for parameter in self.model.parameters))
@@ -213,6 +220,7 @@ class TrainObject(object):
             #     self.logger.log(str(k), self.i, self.model.parameters[k])
             #     print(str(k), self.model.parameters[k])
             self.accumulated_loss = 0
+            self.IS_probability = 0
             self.timing = [0, 0, 0]
             self.prev_iter_time = iter_time
         if "test" in kwargs and self.i % test_iter == 0:

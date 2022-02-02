@@ -74,21 +74,3 @@ def cat(tensors):
 
 def stack(tensors):
     return torch.stack(tensors)
-
-
-def register_tensor_predicates(engine):
-    engine.register_foreign(lambda *x: embed(engine, *x), "embed", 1, 1)
-    engine.register_foreign(lambda *x: tensor_wrapper(engine, rbf, *x), "rbf", 2, 1)
-    engine.register_foreign(lambda *x: tensor_wrapper(engine, add, *x), "add", 2, 1)
-    engine.register_foreign(lambda *x: tensor_wrapper(engine, mul, *x), "mul", 2, 1)
-    engine.register_foreign(lambda *x: tensor_wrapper(engine, dot, *x), "dot", 2, 1)
-    engine.register_foreign(lambda *x: tensor_wrapper(engine, max, *x), "max", 1, 1)
-    engine.register_foreign(
-        lambda *x: tensor_wrapper(engine, sigmoid, *x), "sigmoid", 1, 1
-    )
-    engine.register_foreign(lambda *x: tensor_wrapper(engine, mean, *x), "mean", 1, 1)
-    engine.register_foreign(lambda *x: tensor_wrapper(engine, stack, *x), "stack", 1, 1)
-    engine.register_foreign(lambda *x: tensor_wrapper(engine, cat, *x), "cat", 1, 1)
-    engine.register_foreign(
-        lambda *x: tensor_wrapper(engine, one_hot, *x), "one_hot", 2, 1
-    )

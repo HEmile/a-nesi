@@ -21,7 +21,7 @@ setup(
         "Programming Language :: Prolog",
         "Topic :: Scientific/Engineering :: Artificial Intelligence",
     ],
-    keywords="prolog probabilistic logic neural-symbolic problog deepproblog",
+    keywords="prolog probabilistic logic neural-symbolic problog deepproblog monte-carlo",
     package_dir={"": "src"},
     packages=find_packages(where="src"),
     zip_safe=False,
@@ -32,7 +32,8 @@ setup(
         "torch",
         "torchvision",
         "pysdd",
-        "storchastic"
+        "storchastic",
+        "pathos"
     ],
     extras_require={
         "examples": ["networkx", "Pillow", "scipy", "scikit-learn"],

@@ -1,4 +1,5 @@
-from typing import TYPE_CHECKING, Callable, Sequence
+from pyswip import Atom
+from typing import TYPE_CHECKING, Callable, Sequence, Dict, List
 
 import random
 
@@ -9,7 +10,7 @@ from problog.logic import Term
 from torch.distributions import OneHotCategorical
 
 from deepproblog.query import Query
-from storch import StochasticTensor
+from storch import StochasticTensor, storch
 
 if TYPE_CHECKING:
     from deepproblog.model import Model
@@ -24,16 +25,16 @@ class Sampler(torch.nn.Module):
         self.method_factory: "MethodFactory" = method_factory
         self.n = n
 
-    def prepare_sampler(self, queries: Sequence[Query]):
+    def sample(self, queries: Sequence[Query], samples: List[Dict[str, torch.Tensor]]):
         pass
 
     def __call__(self, queries: Sequence[Query]):
         self.prepare_sampler(queries)
 
-    def get_sample(self, term: Term) -> StochasticTensor:
+    def update_sampler(self, found_results: torch.Tensor):
         pass
 
-    def update_sampler(self, found_results: torch.Tensor):
+    def parents(self) -> List[storch.Tensor]:
         pass
 
     def is_batched(self) -> bool:
