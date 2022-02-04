@@ -43,6 +43,8 @@ from collections import OrderedDict, defaultdict
 
 import time
 import torch
+
+from deepproblog.sampling.memoizer import Memoizer
 from problog.clausedb import ClauseDB
 from problog.engine_stack import FixedContext
 from problog.errors import GroundingError
@@ -53,7 +55,6 @@ from problog.program import LogicProgram
 from typing import Sequence, TYPE_CHECKING, Dict, List
 
 import storch
-from deepproblog.engines.builtins import embed
 from deepproblog.query import Query
 
 from deepproblog.semiring import Result
@@ -230,7 +231,14 @@ def init_db(engine, model: LogicProgram, propagate_evidence=False):
 
     return db, evidence_facts, ev_target
 
-def _single_proof(program: LogicProgram, query: Query, sample_map: Dict[str, torch.Tensor], n: int) -> List[int]:#self, program, sampler: Sampler, sample_map: Dict, query: Query, sample_count: int, batch_index: int):
+def _single_proof(program: LogicProgram, query: Query, sample_map: OrderedDict[str, torch.Tensor],
+                  memoizer: Memoizer, n: int) -> List[int]:#self, program, sampler: Sampler, sample_map: Dict, query: Query, sample_count: int, batch_index: int):
+    costs = memoizer.lookup(query, sample_map)
+
+    # If every result is memoized
+    if len(list(filter(lambda c: c is None, costs))) == 0:
+        return costs
+
     engine = init_engine()
 
     # TODO: Does propagate evidence speed things up?
@@ -238,8 +246,9 @@ def _single_proof(program: LogicProgram, query: Query, sample_map: Dict[str, tor
 
     queryS = query.substitute().query
 
-    costs = []
     for sample_count in range(n):
+        if costs[sample_count] is not None:
+            continue
         # TODO: If not batched, ensure it gets result correctly
         target = SampledFormulaDPL(sample_map, sample_count)
         # for ev_fact in evidence:
@@ -250,26 +259,28 @@ def _single_proof(program: LogicProgram, query: Query, sample_map: Dict[str, tor
             # Note: We are minimizing, so we have negative numbers for good results!
             if name == queryS and truth_value == result.TRUE:
                 # costs[batch_index][sample_count] = -1
-                costs.append(COST_FOUND_PROOF)
+                costs[sample_count] = COST_FOUND_PROOF
             else:
-                costs.append(COST_NO_PROOF)
+                costs[sample_count] = COST_NO_PROOF
         engine.previous_result = result
+    memoizer.add(query, sample_map, costs)
     return costs
 
-def run_proofs_sync(program: LogicProgram, sample_map: List[Dict[str, torch.Tensor]], batch: Sequence[Query], n: int) -> List[List[int]]:
-    return list(map(lambda i: _single_proof(program,  batch[i], sample_map[i], n), range(len(batch))))
+def run_proofs_sync(program: LogicProgram, sample_map: List[OrderedDict[str, torch.Tensor]],
+                    batch: Sequence[Query], memoizer: Memoizer, n: int) -> List[List[int]]:
+    return list(map(lambda i: _single_proof(program,  batch[i], sample_map[i], memoizer, n), range(len(batch))))
 
 
 # noinspection PyUnusedLocal
-def estimate(model: "Model", program: ClauseDB, batch: Sequence[Query],
+def estimate(model: "Model", program: ClauseDB, batch: Sequence[Query], memoizer: Memoizer,
              propagate_evidence=False, amount_workers=4, parallel=False, **kwdargs) -> List[Result]:
     # Initial version will not support evidence propagation.
-
+    start_time = time.time()
     results = []
 
     # TODO: Calculate how long this takes
-    start_time = time.time()
-    sample_map: List[Dict[str, torch.Tensor]] = [OrderedDict() for _ in range(len(batch))]
+    sample_map: List[OrderedDict[str, torch.Tensor]] = [OrderedDict() for _ in range(len(batch))]
+
     # TODO: What if there are multiple networks + samplers?
     for network in model.networks.values():
         sampler = network.sampler
@@ -282,10 +293,8 @@ def estimate(model: "Model", program: ClauseDB, batch: Sequence[Query],
         from deepproblog.sampling.parallel import run_proof_threads
         all_costs = run_proof_threads(model, sample_map, batch, sampler.n)
     else:
-        all_costs = run_proofs_sync(program, sample_map, batch, sampler.n)
+        all_costs = run_proofs_sync(program, sample_map, batch, memoizer, sampler.n)
 
-    # print(all_costs)
-    query_time = time.time() - start_time
     parents: [storch.StochasticTensor] = []
     for network in model.networks.values():
         parents.extend(network.sampler.parents())
@@ -296,9 +305,12 @@ def estimate(model: "Model", program: ClauseDB, batch: Sequence[Query],
     if not batch_first:
         cost_tensor = cost_tensor.T
     sampler.update_sampler(cost_tensor)
+    memoizer.update()
     # TODO: May not work if the sampling method has more than 2 dimensions
     found_proof = storch.Tensor(cost_tensor, parents, plates, "found_proof")
+    query_time = time.time() - start_time
     results.append(
         Result({}, found_proof=found_proof, ground_time=query_time, stoch_tensors=parents, is_batched=True))
+
 
     return results

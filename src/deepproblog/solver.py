@@ -5,8 +5,9 @@ from typing import Type, TYPE_CHECKING, Optional, List, Sequence
 from deepproblog.arithmetic_circuit import ArithmeticCircuit
 from deepproblog.engines import Engine
 from deepproblog.query import Query
+from deepproblog.sampling.memoizer import Memoizer
 from deepproblog.sampling.sample import estimate
-from deepproblog.sampling.sampler import Sampler
+from deepproblog.sampling.sampler import Sampler, DefaultQueryMapper
 from deepproblog.semiring import Result
 from deepproblog.semiring.graph_semiring import GraphSemiring, Semiring
 from deepproblog.utils.cache import Cache
@@ -137,6 +138,8 @@ class MCSolver(Solver):
         self.engine: "MCEngine" = engine
         self.model = model
         self.program = self.engine.prepare(model.program)
+        # TODO: What if people use different mappers?
+        self.memoizer = Memoizer(DefaultQueryMapper())
 
 
     def solve(self, batch: Sequence[Query]) -> List[Result]:
@@ -147,7 +150,7 @@ class MCSolver(Solver):
         """
         self.engine.tensor_store.clear()
 
-        results = estimate(self.model, self.program, batch)
+        results = estimate(self.model, self.program, batch, self.memoizer)
 
         return results
 
