@@ -138,6 +138,7 @@ class MCSolver(Solver):
         self.model = model
         self.program = self.engine.prepare(model.program)
 
+
     def solve(self, batch: Sequence[Query]) -> List[Result]:
         """
         Performs inference for a batch of queries.

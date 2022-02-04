@@ -11,8 +11,7 @@ from zipfile import ZipFile
 
 import torch
 
-from deepproblog.engines.builtins import tensor_wrapper, mul, add, rbf, embed, dot, sigmoid, \
-    mean, stack, cat, one_hot
+from deepproblog.engines.builtins import register_tensor_predicates
 from problog.logic import term2list, Term, Clause, Constant, InstantiationError, Or
 from problog.program import PrologString, PrologFile, SimpleProgram, LogicProgram
 from .dataset import Dataset, ImageDataset
@@ -25,23 +24,7 @@ from .semiring import Result
 from .solver import ACSolver, Solver, MCSolver
 from .utils import check_path
 
-def register_tensor_predicates(engine):
-    # Moved out of builtins.py for pickl reasons
-    engine.register_foreign(lambda *x: embed(engine, *x), "embed", 1, 1)
-    engine.register_foreign(lambda *x: tensor_wrapper(engine, rbf, *x), "rbf", 2, 1)
-    engine.register_foreign(lambda *x: tensor_wrapper(engine, add, *x), "add", 2, 1)
-    engine.register_foreign(lambda *x: tensor_wrapper(engine, mul, *x), "mul", 2, 1)
-    engine.register_foreign(lambda *x: tensor_wrapper(engine, dot, *x), "dot", 2, 1)
-    engine.register_foreign(lambda *x: tensor_wrapper(engine, max, *x), "max", 1, 1)
-    engine.register_foreign(
-        lambda *x: tensor_wrapper(engine, sigmoid, *x), "sigmoid", 1, 1
-    )
-    engine.register_foreign(lambda *x: tensor_wrapper(engine, mean, *x), "mean", 1, 1)
-    engine.register_foreign(lambda *x: tensor_wrapper(engine, stack, *x), "stack", 1, 1)
-    engine.register_foreign(lambda *x: tensor_wrapper(engine, cat, *x), "cat", 1, 1)
-    engine.register_foreign(
-        lambda *x: tensor_wrapper(engine, one_hot, *x), "one_hot", 2, 1
-    )
+
 
 
 class Model(object):

@@ -33,7 +33,7 @@ setup(
         "torchvision",
         "pysdd",
         "storchastic",
-        "pathos"
+        "ray"
     ],
     extras_require={
         "examples": ["networkx", "Pillow", "scipy", "scikit-learn"],
