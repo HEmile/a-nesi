@@ -62,6 +62,10 @@ from problog.tasks.sample import SampledFormula, init_engine
 if TYPE_CHECKING:
     from deepproblog.model import Model
 
+COST_FOUND_PROOF = -1
+COST_NO_PROOF = 0
+
+
 class SampledFormulaDPL(SampledFormula):
     model: "Model"
 
@@ -246,9 +250,9 @@ def _single_proof(program: LogicProgram, query: Query, sample_map: Dict[str, tor
             # Note: We are minimizing, so we have negative numbers for good results!
             if name == queryS and truth_value == result.TRUE:
                 # costs[batch_index][sample_count] = -1
-                costs.append(-1)
+                costs.append(COST_FOUND_PROOF)
             else:
-                costs.append(0)
+                costs.append(COST_NO_PROOF)
         engine.previous_result = result
     return costs
 
@@ -281,21 +285,20 @@ def estimate(model: "Model", program: ClauseDB, batch: Sequence[Query],
         all_costs = run_proofs_sync(program, sample_map, batch, sampler.n)
 
     # print(all_costs)
-    if sampler.is_batched():
-        query_time = time.time() - start_time
-        parents: [storch.StochasticTensor] = []
-        for network in model.networks.values():
-            parents.extend(network.sampler.parents())
+    query_time = time.time() - start_time
+    parents: [storch.StochasticTensor] = []
+    for network in model.networks.values():
+        parents.extend(network.sampler.parents())
 
-        cost_tensor = torch.tensor(all_costs)
-        plates = parents[-1].plates
-        batch_first = plates[0].name == 'batch'
-        if not batch_first:
-            cost_tensor = cost_tensor.T
-        sampler.update_sampler(cost_tensor)
-        # TODO: May not work if the sampling method has more than 2 dimensions
-        found_proof = storch.Tensor(cost_tensor, parents, plates, "found_proof")
-        results.append(
-            Result({}, found_proof=found_proof, ground_time=query_time, stoch_tensors=parents, is_batched=True))
+    cost_tensor = torch.tensor(all_costs)
+    plates = parents[-1].plates
+    batch_first = plates[0].name == 'batch'
+    if not batch_first:
+        cost_tensor = cost_tensor.T
+    sampler.update_sampler(cost_tensor)
+    # TODO: May not work if the sampling method has more than 2 dimensions
+    found_proof = storch.Tensor(cost_tensor, parents, plates, "found_proof")
+    results.append(
+        Result({}, found_proof=found_proof, ground_time=query_time, stoch_tensors=parents, is_batched=True))
 
     return results
