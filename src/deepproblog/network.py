@@ -42,7 +42,7 @@ class Network(object):
         # self.function = function
         # if function is None:
         self.function = get_tensor_function(self)
-        self.optimizer = optimizer
+        self.optimizer: torch.optim.Optimizer = optimizer
         self.sampler = sampler
         if self.sampler:
             self.sampler.network_name = name
@@ -176,6 +176,7 @@ class Network(object):
             "name": self.name,
             "module": str(self.network_module),
             "optimizer": str(self.optimizer),
+            "lr": self.optimizer.lr,
             "k": self.k,
         }
         if self.sampler:

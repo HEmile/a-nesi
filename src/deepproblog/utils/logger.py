@@ -96,7 +96,6 @@ class Logger(object):
                     if len(data[i]) > 0:
                         self.log(h, index, float(data[i]))
 
-
 def equalize(data):  # Makes all sets of data contain same indices
     indices = set()
     for d in data:

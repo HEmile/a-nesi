@@ -188,7 +188,7 @@ class NoConfigException(Exception):
 def load_config(filename: str = None):
     """
     Loads a config file.
-    :param filename: Filename of configuration file to load. If None, it uses the first commandline argument as filename.
+    :param filename: Filename of args file to load. If None, it uses the first commandline argument as filename.
     :return: None
     """
     try:

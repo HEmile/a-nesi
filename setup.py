@@ -32,7 +32,8 @@ setup(
         "torch",
         "torchvision",
         "pysdd",
-        "storchastic"
+        "storchastic",
+        "wandb"
     ],
     extras_require={
         "examples": ["networkx", "Pillow", "scipy", "scikit-learn"],

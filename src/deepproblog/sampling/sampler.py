@@ -95,9 +95,6 @@ class Sampler(torch.nn.Module):
     def get_hyperparameters(self) -> dict:
         return {
             "n": self.n,
+            "type": "independent"
         }
 
-    def get_hyperparameters(self) -> dict:
-        hps = super().get_hyperparameters()
-        hps["type"] = "independent"
-        return hps

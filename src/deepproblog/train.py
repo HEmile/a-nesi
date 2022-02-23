@@ -1,15 +1,15 @@
 import signal
 import time
 import torch
-from typing import List, Callable, Union
+from typing import List, Callable, Union, Optional
 
 import storch
 from deepproblog.dataset import DataLoader
 from deepproblog.model import Model
 from deepproblog.query import Query
-from deepproblog.utils.logger import Logger
 from deepproblog.utils.stop_condition import EpochStop
 from deepproblog.utils.stop_condition import StopCondition
+import wandb
 
 
 class TrainObject(object):
@@ -19,7 +19,6 @@ class TrainObject(object):
 
     def __init__(self, model: Model):
         self.model = model
-        self.logger = Logger()
         self.accumulated_loss = 0
         self.IS_probability = 0
         self.i = 1
@@ -97,7 +96,7 @@ class TrainObject(object):
             log_iter: int = 100,
             initial_test: bool = True,
             **kwargs
-    ) -> Logger:
+    ) :
 
         self.previous_handler = signal.getsignal(signal.SIGINT)
         use_storch_training = False
@@ -114,10 +113,11 @@ class TrainObject(object):
         self.start = time.time()
         self.prev_iter_time = time.time()
         epoch_size = len(loader)
-        if "test" in kwargs and initial_test:
-            value = kwargs["test"](self.model)
-            self.logger.log_list(self.i, value)
-            print("Test: ", value)
+        # TODO: This is crashing on me, need to fix.
+        # if "test" in kwargs and initial_test:
+        #     value = kwargs["test"](self.model)
+        #     wandb.log({"val": {"test": value}, "iteration": self.i, "epoch": self.epoch})
+        #     print("Test: ", value)
 
         if type(stop_criterion) is int:
             stop_criterion = EpochStop(stop_criterion)
@@ -130,8 +130,8 @@ class TrainObject(object):
                 print("Epoch", self.epoch + 1)
 
             for batch in loader:
-            #     break
-            # while True:
+                #     break
+                # while True:
                 if self.interrupt:
                     break
                 self.i += 1
@@ -183,7 +183,6 @@ class TrainObject(object):
             self.model.save_state(filename)
 
         signal.signal(signal.SIGINT, self.previous_handler)
-        return self.logger
 
     def log(
             self, snapshot_iter: int = None, log_iter=100, test_iter=1000, verbose=1, **kwargs
@@ -198,7 +197,8 @@ class TrainObject(object):
             filename = "{}_iter_{}.mdl".format(kwargs["snapshot_name"], self.i)
             print("Writing snapshot to " + filename)
             self.model.save_state(filename)
-        if verbose and self.i % log_iter == 0:
+        if self.i % log_iter == 0:
+            to_log = {"iteration": self.i}
             print(
                 "Iteration: ",
                 self.i,
@@ -211,11 +211,10 @@ class TrainObject(object):
             )
             if len(self.model.parameters):
                 print("\t".join(str(parameter) for parameter in self.model.parameters))
-            self.logger.log("time", self.i, iter_time - self.start)
-            self.logger.log("loss", self.i, self.accumulated_loss / log_iter)
-            self.logger.log("ground_time", self.i, self.timing[0] / log_iter)
-            self.logger.log("compile_time", self.i, self.timing[1] / log_iter)
-            self.logger.log("eval_time", self.i, self.timing[2] / log_iter)
+            to_log["train"] = {"loss": self.accumulated_loss / log_iter,
+                               "ground_time": self.timing[0] / log_iter,
+                               "compile_time": self.timing[1] / log_iter,
+                               "eval_time": self.timing[2] / log_iter}
             # for k in self.model.parameters:
             #     self.logger.log(str(k), self.i, self.model.parameters[k])
             #     print(str(k), self.model.parameters[k])
@@ -223,21 +222,36 @@ class TrainObject(object):
             self.IS_probability = 0
             self.timing = [0, 0, 0]
             self.prev_iter_time = iter_time
-        if "test" in kwargs and self.i % test_iter == 0:
-            value = kwargs["test"](self.model)
-            self.logger.log_list(self.i, value)
-            print("Test: ", value)
+            # TODO: Fix and re-enable. Apparently, wandb doesnt like sets, so make sure to fix that
+            # if "test" in kwargs and self.i % test_iter == 0:
+            #     value = kwargs["test"](self.model)
+            #     to_log["test"] = value
+            #     print("Test: ", value)
+            # print(to_log)
+            wandb.log(to_log)
 
     def write_to_file(self, *args, **kwargs):
-        self.logger.write_to_file(*args, **kwargs)
+        print("Not implemented for wandb!")
+        # self.logger.write_to_file(*args, **kwargs)
 
 
 def train_model(
         model: Model,
         loader: DataLoader,
         stop_condition: Union[int, StopCondition],
+        run_note: Optional[str] = None,
+        run_tags: Optional[List[str]] = None,
+        extra_config: Optional[dict] = None,
         **kwargs
 ) -> TrainObject:
+    extra_config = extra_config if extra_config else {}
+    wandb.init(
+        project="deepproblog-mc",
+        entity="hemile",
+        notes=run_note,
+        tags=run_tags,
+        config={**model.get_hyperparameters(), **extra_config}
+    )
     train_object = TrainObject(model)
     train_object.train(loader, stop_condition, **kwargs)
     return train_object

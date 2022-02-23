@@ -223,9 +223,9 @@ class Model(object):
         parameters["solver"] = (
             None if self.solver is None else self.solver.get_hyperparameters()
         )
-        parameters["networks"] = [
-            self.networks[network].get_hyperparameters() for network in self.networks
-        ]
+        parameters["networks"] = {
+            network: self.networks[network].get_hyperparameters() for network in self.networks
+        }
         parameters["program"] = self.program.to_prolog()
         return parameters
 
