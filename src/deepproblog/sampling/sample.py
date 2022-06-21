@@ -232,7 +232,7 @@ def init_db(engine, model: LogicProgram, propagate_evidence=False):
     return db, evidence_facts, ev_target
 
 def _single_proof(program: LogicProgram, query: Query, sample_map: OrderedDict[str, torch.Tensor],
-                  memoizer: Memoizer, n: int) -> List[int]:#self, program, sampler: Sampler, sample_map: Dict, query: Query, sample_count: int, batch_index: int):
+                  memoizer: Memoizer, n: int) -> List[int]:
     costs = memoizer.lookup(query, sample_map)
 
     # If every result is memoized
@@ -247,6 +247,7 @@ def _single_proof(program: LogicProgram, query: Query, sample_map: OrderedDict[s
     queryS = query.substitute().query
 
     for sample_count in range(n):
+        # Check if memoized
         if costs[sample_count] is not None:
             continue
         # TODO: If not batched, ensure it gets result correctly

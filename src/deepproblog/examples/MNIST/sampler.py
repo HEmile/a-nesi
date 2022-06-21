@@ -13,9 +13,8 @@ import storch
 
 class AdditionSampler(ImportanceSampler):
     def __init__(self, method: MethodFactory, n: int):
-        super().__init__(method, n)
-        self.max_classes = 19
-        self.lin1 = nn.Linear(2 * 10 + self.max_classes, 30)
+        super().__init__(method, n, 19)
+        self.lin1 = nn.Linear(2 * 10 + self.n_classes_query, 30)
         self.outp1 = nn.Linear(30, 10)
         self.outp2 = nn.Linear(30 + 10, 10)
         self.is_learning_rate_weight = 10.

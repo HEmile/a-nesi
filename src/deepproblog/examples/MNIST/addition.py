@@ -18,6 +18,7 @@ from deepproblog.heuristics import geometric_mean
 from deepproblog.model import Model
 from deepproblog.network import Network
 from deepproblog.sampling.grad_estim import factory_storch_method
+from deepproblog.sampling.sampler import Sampler
 from deepproblog.train import train_model
 from deepproblog.utils import get_configuration, format_time_precise, config_to_string
 
@@ -28,13 +29,15 @@ if __name__ == '__main__':
 
     parameters = {
         "method": ["mc", "exact", "gm"],
+        "grad_estim": ["rao-blackwell"],
         "N": [1, 2, 3],
         "pretrain": [0],
         "exploration": [False, True],
         "run": range(5),
-        "batch_size": [10],
-        "amt_samples": [10],
-        "lr": [1e-3]
+        "batch_size": [13],
+        "amt_samples": [4],
+        "lr": [1e-3],
+        "importance_sampling": [False]
     }
 
 
@@ -54,7 +57,13 @@ if __name__ == '__main__':
         network.load_state_dict(
             torch.load("models/pretrained/all_{}.pth".format(args["pretrain"]))
         )
-    sampler = AdditionSampler(factory_storch_method(), args["amt_samples"]) if args["method"] == "mc" else None
+
+    sampler = None
+    if args["method"] == "mc":
+        if args["importance_sampling"]:
+            sampler = AdditionSampler(factory_storch_method(args["grad_estim"]), args["amt_samples"])
+        else:
+            sampler = Sampler(factory_storch_method(args["grad_estim"]), args["amt_samples"], 19)  # TODO: n classes target 19 depends on the amount of digits
     net = Network(network, MNIST_NETWORK_NAME, sampler=sampler, batching=True)
     model = Model("models/addition.pl", [net])
 

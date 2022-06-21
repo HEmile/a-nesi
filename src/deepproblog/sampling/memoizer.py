@@ -17,6 +17,7 @@ class Memoizer:
 
     def _to_string(self, q_i: List[Term], q_o: List[str], sample_map: OrderedDict[str, torch.Tensor], index: int):
         # We are not using the name of the input terms, because those differ over iterations (eg train(0) and train(2)...)
+        # End results are deterministic given an output.
         id = "in{"
         for i, in_term in enumerate(sample_map.values()):
            id += f"{i}={torch.argmax(in_term[index]).numpy()};"

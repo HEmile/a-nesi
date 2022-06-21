@@ -4,7 +4,7 @@ import torch
 import storch
 
 from storch import CostTensor, StochasticTensor
-from storch.method import Baseline, Method, ScoreFunction
+from storch.method import Baseline, Method, ScoreFunction, RaoBlackwellSF
 from storch.method.baseline import BatchAverageBaseline
 from storch.sampling import SamplingMethod
 
@@ -52,10 +52,17 @@ class MethodFactory(Protocol):
 
 
 def factory_storch_method(name="hybrid-baseline") -> MethodFactory:
+    seq_estim = None
     def create_storch_method(atom_name: str, amt_samples: int, sampling_method: Optional[SamplingMethod]=None):
+        nonlocal seq_estim
         if name == 'hybrid-baseline':
             return ScoreFunction(atom_name, n_samples=amt_samples, sampling_method=sampling_method,
                                  baseline_factory=lambda s, c: BaselineLearner())
+        if name == 'rao-blackwell':
+            # Seq-based estimators share the same estimator object at each step.
+            if not seq_estim:
+                seq_estim = RaoBlackwellSF(atom_name, amt_samples)
+            return seq_estim
         return ScoreFunction(atom_name, n_samples=amt_samples, sampling_method=sampling_method,
                              baseline_factory='batch-average')
 

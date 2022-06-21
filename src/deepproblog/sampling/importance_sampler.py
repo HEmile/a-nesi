@@ -9,7 +9,6 @@ from deepproblog.query import Query
 from deepproblog.sampling.sampler import Sampler
 from storch import Plate
 import storch
-from torch.nn.functional import one_hot
 
 from storch.method import Method
 from storch.sampling.importance_sampling import ImportanceSampleDecoder
@@ -22,13 +21,6 @@ class ImportanceSampler(Sampler):
     def sample(self, queries: Sequence[Query], sample_map: List[Dict[str, torch.Tensor]]):
         self.is_dists = []
         super().sample(queries, sample_map)
-        # print("dist1", dist1)
-        # p1.logits.register_hook(lambda g: print("logits1 grad", g))
-        # p2.logits.register_hook(lambda g: print("logits2 grad", g))
-        # p1.probs.register_hook(lambda g: print("probs1 grad", g))
-        # p2.probs.register_hook(lambda g: print("probs2 grad", g))
-
-
 
     def _sample(self, dist_t: torch.Tensor, index_term: int, method: Method) -> storch.Tensor:
         return super()._sample(dist_t, index_term, method)

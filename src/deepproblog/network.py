@@ -176,7 +176,7 @@ class Network(object):
             "name": self.name,
             "module": str(self.network_module),
             "optimizer": str(self.optimizer),
-            "lr": self.optimizer.lr,
+            "lr": self.optimizer.defaults["lr"],
             "k": self.k,
         }
         if self.sampler:
