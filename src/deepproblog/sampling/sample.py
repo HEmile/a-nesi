@@ -63,8 +63,8 @@ from problog.tasks.sample import SampledFormula, init_engine
 if TYPE_CHECKING:
     from deepproblog.model import Model
 
-COST_FOUND_PROOF = -1
-COST_NO_PROOF = 0
+COST_FOUND_PROOF = 1
+COST_NO_PROOF = -1
 
 
 class SampledFormulaDPL(SampledFormula):

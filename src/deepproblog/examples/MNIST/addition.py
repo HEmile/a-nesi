@@ -29,7 +29,7 @@ if __name__ == '__main__':
 
     parameters = {
         "method": ["mc", "exact", "gm"],
-        "grad_estim": ["rao-blackwell"],
+        "grad_estim": ["vanilla-sf", "rao-blackwell", "hybrid-baseline"],
         "N": [1, 2, 3],
         "pretrain": [0],
         "exploration": [False, True],
@@ -37,9 +37,9 @@ if __name__ == '__main__':
         "batch_size": [13],
         "amt_samples": [4],
         "lr": [1e-3],
-        "importance_sampling": [False]
+        "importance_sampling": [False],
+        "epochs": [20]
     }
-
 
     args = get_configuration(parameters, i)
 
@@ -87,7 +87,7 @@ if __name__ == '__main__':
     model.add_tensor_source("test", MNIST_test)
 
     loader = DataLoader(train_set, args["batch_size"], False)
-    train = train_model(model, loader, 1,
+    train = train_model(model, loader, args["epochs"],
                         log_iter=100,
                         profile=0,
                         test=lambda model: get_confusion_matrix(model, test_set, verbose=1).accuracy(),

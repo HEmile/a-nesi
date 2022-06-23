@@ -1,4 +1,4 @@
-from typing import TYPE_CHECKING, Callable, Sequence, Dict, List, Tuple
+from typing import TYPE_CHECKING, Callable, Sequence, Dict, List, Tuple, OrderedDict
 
 import random
 
@@ -32,6 +32,13 @@ class DefaultQueryMapper(QueryMapper):
             del inputs[ind]
         outputs = list(map(lambda ind: query.query.args[ind], query.output_ind))
         return inputs, outputs
+
+def print_samples(samples: List):
+    for od in samples:
+        samplez = []
+        for sample in od.values():
+            samplez.append(torch.argmax(sample, dim=-1))
+        print(samplez)
 
 
 class Sampler(torch.nn.Module):
@@ -76,6 +83,16 @@ class Sampler(torch.nn.Module):
         for index_term, dist in enumerate(dists):
             # Call storchastic sample method
             # TODO: How to combine this with MAPO? We already implemented the memoizer, can we move that to storch?
+            # def print_grad(x):
+            #     print(torch.sum(x, dim=0))
+            # dist.register_hook(print_grad)
+
+            # TEST: Try to minimize entropy
+            entropy = (dist * (dist + 1e-9).log()).sum(-1)
+            # print(storch.reduce_plates(entropy))
+            # 0.1 worked fine for score function
+            storch.add_cost(0.1*entropy, f'entropy_{index_term}')
+
             sample = self._sample(dist, index_term, method)
             self.samples.append(sample)
             sample_t = sample._tensor
@@ -83,6 +100,7 @@ class Sampler(torch.nn.Module):
                 sample_t = sample_t.permute((1, 0, 2))
             for i, sample_dict in enumerate(samples):
                 sample_dict[str(Term(*to_eval[n_i_terms * i + index_term]))] = sample_t[i]
+        # print_samples(samples)
 
     def _sample(self, dist: torch.Tensor, index_term: int, method: Method):
         return method(OneHotCategorical(dist))

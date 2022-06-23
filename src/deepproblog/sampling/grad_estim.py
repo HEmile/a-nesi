@@ -63,6 +63,9 @@ def factory_storch_method(name="hybrid-baseline") -> MethodFactory:
             if not seq_estim:
                 seq_estim = RaoBlackwellSF(atom_name, amt_samples)
             return seq_estim
+        if name == 'vanilla-sf':
+            return ScoreFunction(atom_name, n_samples=amt_samples, sampling_method=sampling_method,
+                                 baseline_factory=None)
         return ScoreFunction(atom_name, n_samples=amt_samples, sampling_method=sampling_method,
                              baseline_factory='batch-average')
 

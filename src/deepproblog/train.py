@@ -7,6 +7,7 @@ import storch
 from deepproblog.dataset import DataLoader
 from deepproblog.model import Model
 from deepproblog.query import Query
+from deepproblog.sampling.sample import COST_NO_PROOF, COST_FOUND_PROOF
 from deepproblog.utils.stop_condition import EpochStop
 from deepproblog.utils.stop_condition import StopCondition
 import wandb
@@ -107,6 +108,7 @@ class TrainObject(object):
             use_storch_training = True
 
         self.accumulated_loss = 0
+        self.proof_prob = 0
         self.IS_probability = 0
         self.timing = [0, 0, 0]
         self.epoch = 0
@@ -129,54 +131,62 @@ class TrainObject(object):
             if verbose and epoch_size > log_iter:
                 print("Epoch", self.epoch + 1)
 
-            for batch in loader:
-                #     break
-                # while True:
-                if self.interrupt:
-                    break
-                self.i += 1
-                self.model.train()
-                self.model.optimizer.zero_grad()
-                if use_storch_training:
-                    # TODO: No loss for negatives
-                    result = self.model.solve(batch)
-                    for r in result:
-                        assert r.found_proof is not None
-                        # TODO: Can there ever be multiple keys? (ie multiple queries?
-                        #  Also: Should they then be combined like this?
-                        if r.is_batched:
-                            storch.add_cost(r.found_proof, 'found_proof_c')
-                            self.accumulated_loss += storch.reduce_plates(r.found_proof.float())._tensor.data
-                            # TODO: IS Probability
-                            self.IS_probability += torch.mean(r.found_proof._tensor.double())
-                        else:
-                            for q in r.found_proof:
-                                storch.add_cost(r.found_proof[q], f'found_proof_{q}')
-                                self.accumulated_loss += torch.mean(r.found_proof[q]._tensor.double()) / len(result)
+            with torch.autograd.set_detect_anomaly(False):
+                for batch in loader:
+                    #     break
+                    # while True:
+                    if self.interrupt:
+                        break
+                    self.i += 1
+                    self.model.train()
+                    self.model.optimizer.zero_grad()
+                    if use_storch_training:
+                        # TODO: No loss for negatives
+                        result = self.model.solve(batch)
+                        for r in result:
+                            assert r.found_proof is not None
 
-                        # Apply entropy minimization (positive) or maximization (negative)
-                        # for s in r.stoch_tensors:
-                        #     storch.add_cost(-0.1*s.distribution.entropy(), f'entropy_{s.name}')
-                        storch.backward()
-                        # self.accumulated_loss += prob_query / len(result)
-                else:
-                    if with_negatives:
-                        loss = self.get_loss_with_negatives(batch, loss_function)
+                            # # TODO: Can there ever be multiple keys? (ie multiple queries?
+                            # #  Also: Should they then be combined like this?
+                            # # Old code, we assume batching now
+                            # if r.is_batched:
+                            #     storch.add_cost(r.found_proof, 'found_proof_c')
+                            #     self.accumulated_loss += storch.reduce_plates(r.found_proof.float())._tensor.data
+                            #     # TODO: IS Probability
+                            #     #  I don't know what I meant with this TODO.
+                            #     self.IS_probability += torch.mean(r.found_proof._tensor.double())
+                            # else:
+                            #     for q in r.found_proof:
+                            #         storch.add_cost(r.found_proof[q], f'found_proof_{q}')
+                            #         self.accumulated_loss += torch.mean(r.found_proof[q]._tensor.double()) / len(result)
+                            # Apply entropy minimization (positive) or maximization (negative)
+                            # for s in r.stoch_tensors:
+                            #     storch.add_cost(0.1*s.distribution.entropy(), f'entropy_{s.name}')
+
+                            # print(r.found_proof)
+                            storch.add_cost(-r.found_proof, 'found_proof_c')
+                            self.proof_prob += storch.reduce_plates(
+                                r.found_proof / (COST_FOUND_PROOF - COST_NO_PROOF) + 1/2
+                            )._tensor.data
+                            self.accumulated_loss += storch.backward()
                     else:
-                        loss = self.get_loss(batch, loss_function)
-                    self.accumulated_loss += loss
+                        if with_negatives:
+                            loss = self.get_loss_with_negatives(batch, loss_function)
+                        else:
+                            loss = self.get_loss(batch, loss_function)
+                        self.accumulated_loss += loss
 
-                self.model.optimizer.step()
-                self.log(verbose=verbose, log_iter=log_iter, **kwargs)
-                for j, hook in self.hooks:
-                    if self.i % j == 0:
-                        hook(self)
+                    self.model.optimizer.step()
+                    self.log(verbose=verbose, log_iter=log_iter, **kwargs)
+                    for j, hook in self.hooks:
+                        if self.i % j == 0:
+                            hook(self)
 
-                if stop_criterion.is_stop(self):
-                    break
-            if verbose and epoch_size > log_iter:
-                print("Epoch time: ", time.time() - epoch_start)
-            self.epoch += 1
+                    if stop_criterion.is_stop(self):
+                        break
+                if verbose and epoch_size > log_iter:
+                    print("Epoch time: ", time.time() - epoch_start)
+                self.epoch += 1
         if "snapshot_name" in kwargs:
             filename = "{}_final.mdl".format(kwargs["snapshot_name"])
             print("Writing snapshot to " + filename)
@@ -205,13 +215,14 @@ class TrainObject(object):
                 "\ts:%.4f" % (iter_time - self.prev_iter_time),
                 "\tAverage Loss: ",
                 self.accumulated_loss / log_iter,
-                "\tIS Loss:",
-                self.IS_probability / log_iter,
+                "\tProof prob:",
+                self.proof_prob / log_iter,
                 flush=True
             )
             if len(self.model.parameters):
                 print("\t".join(str(parameter) for parameter in self.model.parameters))
             to_log["train"] = {"loss": self.accumulated_loss / log_iter,
+                               "proof_prob": self.proof_prob / log_iter,
                                "ground_time": self.timing[0] / log_iter,
                                "compile_time": self.timing[1] / log_iter,
                                "eval_time": self.timing[2] / log_iter}
@@ -219,6 +230,7 @@ class TrainObject(object):
             #     self.logger.log(str(k), self.i, self.model.parameters[k])
             #     print(str(k), self.model.parameters[k])
             self.accumulated_loss = 0
+            self.proof_prob = 0
             self.IS_probability = 0
             self.timing = [0, 0, 0]
             self.prev_iter_time = iter_time
