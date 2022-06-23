@@ -18,9 +18,9 @@ from storch.sampling.seq import AncestralPlate
 class ImportanceSampler(Sampler):
     is_dists: List[Distribution]
 
-    def sample(self, queries: Sequence[Query], sample_map: List[Dict[str, torch.Tensor]]):
+    def sample_atoms(self, queries: Sequence[Query], sample_map: List[Dict[str, torch.Tensor]]):
         self.is_dists = []
-        super().sample(queries, sample_map)
+        super().sample_atoms(queries, sample_map)
 
     def _sample(self, dist_t: torch.Tensor, index_term: int, method: Method) -> storch.Tensor:
         return super()._sample(dist_t, index_term, method)

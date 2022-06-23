@@ -91,6 +91,7 @@ class TrainObject(object):
             self,
             loader: DataLoader,
             stop_criterion: Union[int, StopCondition],
+            args: dict,
             verbose: int = 1,
             loss_function_name: str = "cross_entropy",
             with_negatives: bool = False,
@@ -110,6 +111,7 @@ class TrainObject(object):
         self.accumulated_loss = 0
         self.proof_prob = 0
         self.IS_probability = 0
+        self.entropy = 0
         self.timing = [0, 0, 0]
         self.epoch = 0
         self.start = time.time()
@@ -163,7 +165,9 @@ class TrainObject(object):
                             # for s in r.stoch_tensors:
                             #     storch.add_cost(0.1*s.distribution.entropy(), f'entropy_{s.name}')
 
-                            # print(r.found_proof)
+                            # assumes all costs are entropy
+                            self.entropy += sum(map(lambda c: storch.reduce_plates(c)._tensor.data, storch.costs())) / (len(storch.costs()) * args["entropy_weight"])
+
                             storch.add_cost(-r.found_proof, 'found_proof_c')
                             self.proof_prob += storch.reduce_plates(
                                 r.found_proof / (COST_FOUND_PROOF - COST_NO_PROOF) + 1/2
@@ -217,12 +221,15 @@ class TrainObject(object):
                 self.accumulated_loss / log_iter,
                 "\tProof prob:",
                 self.proof_prob / log_iter,
+                "\tEntropy:",
+                self.entropy / log_iter,
                 flush=True
             )
             if len(self.model.parameters):
                 print("\t".join(str(parameter) for parameter in self.model.parameters))
             to_log["train"] = {"loss": self.accumulated_loss / log_iter,
                                "proof_prob": self.proof_prob / log_iter,
+                               "entropy": self.entropy / log_iter,
                                "ground_time": self.timing[0] / log_iter,
                                "compile_time": self.timing[1] / log_iter,
                                "eval_time": self.timing[2] / log_iter}
@@ -232,6 +239,7 @@ class TrainObject(object):
             self.accumulated_loss = 0
             self.proof_prob = 0
             self.IS_probability = 0
+            self.entropy = 0
             self.timing = [0, 0, 0]
             self.prev_iter_time = iter_time
             # TODO: Fix and re-enable. Apparently, wandb doesnt like sets, so make sure to fix that
@@ -253,17 +261,17 @@ def train_model(
         stop_condition: Union[int, StopCondition],
         run_note: Optional[str] = None,
         run_tags: Optional[List[str]] = None,
-        extra_config: Optional[dict] = None,
+        args: Optional[dict] = None,
         **kwargs
 ) -> TrainObject:
-    extra_config = extra_config if extra_config else {}
+    args = args if args else {}
     wandb.init(
         project="deepproblog-mc",
         entity="hemile",
         notes=run_note,
         tags=run_tags,
-        config={**model.get_hyperparameters(), **extra_config}
+        config={**model.get_hyperparameters(), **args}
     )
     train_object = TrainObject(model)
-    train_object.train(loader, stop_condition, **kwargs)
+    train_object.train(loader, stop_condition, args, **kwargs)
     return train_object

@@ -285,7 +285,7 @@ def estimate(model: "Model", program: ClauseDB, batch: Sequence[Query], memoizer
     # TODO: What if there are multiple networks + samplers?
     for network in model.networks.values():
         sampler = network.sampler
-        sampler.sample(batch, sample_map)
+        sampler.sample_atoms(batch, sample_map)
         break
     all_costs = [[1 for j in range(sampler.n)] for i in range(len(batch))]
     # This map gets reused over multiple samples of the same query, so we do not query the NN model unnecessarily

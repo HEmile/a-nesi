@@ -45,15 +45,17 @@ class Sampler(torch.nn.Module):
     model: "Model"
     network_name: str
     mapper: QueryMapper
-    def __init__(self, method_factory: "MethodFactory", n: int, n_classes_query:int, mapper: QueryMapper=None):
+
+    def __init__(self, method_factory: "MethodFactory", n: int, n_classes_query:int, entropy_weight: float, mapper: QueryMapper=None):
         super().__init__()
         if not mapper:
             self.mapper = DefaultQueryMapper()
         self.method_factory: "MethodFactory" = method_factory
         self.n = n
         self.n_classes_query = n_classes_query
+        self.entropy_weight = entropy_weight
 
-    def sample(self, queries: Sequence[Query], samples: List[Dict[str, torch.Tensor]]):
+    def sample_atoms(self, queries: Sequence[Query], samples: List[Dict[str, torch.Tensor]]):
         # TODO: For MAPO, we need to only sample from whatever is not memoized
         to_eval = []
         target_l: List[torch.Tensor] = []
@@ -87,11 +89,11 @@ class Sampler(torch.nn.Module):
             #     print(torch.sum(x, dim=0))
             # dist.register_hook(print_grad)
 
-            # TEST: Try to minimize entropy
-            entropy = (dist * (dist + 1e-9).log()).sum(-1)
+            # TEST: Try to maximize entropy
+            entropy = -(dist * (dist + 1e-9).log()).sum(-1)
             # print(storch.reduce_plates(entropy))
             # 0.1 worked fine for score function
-            storch.add_cost(0.1*entropy, f'entropy_{index_term}')
+            storch.add_cost(-self.entropy_weight*entropy, f'entropy_{index_term}')
 
             sample = self._sample(dist, index_term, method)
             self.samples.append(sample)
@@ -109,7 +111,7 @@ class Sampler(torch.nn.Module):
         return self.method_factory("z", self.n)
 
     def __call__(self, queries: Sequence[Query], samples: List[Dict[str, torch.Tensor]]):
-        self.sample(queries, samples)
+        self.sample_atoms(queries, samples)
 
     def update_sampler(self, found_results: torch.Tensor):
         pass

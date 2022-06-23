@@ -20,6 +20,7 @@ from .engines import Engine
 from .network import Network
 from .optimizer import Optimizer
 from .query import Query
+from .sampling.memoizer import Memoizer
 from .semiring import Result
 from .solver import ACSolver, Solver, MCSolver
 from .utils import check_path
@@ -94,7 +95,7 @@ class Model(object):
                     result[(net, k)] = out[i]
         return result
 
-    def set_engine(self, engine: Engine, **kwargs):
+    def set_engine(self, engine: Engine, memoizer: Optional[Memoizer]=None, **kwargs):
         """
         Initializes the solver of this model with the given engine and additional arguments.
         :param engine: The engine that will be used to ground queries in this model.
@@ -104,7 +105,7 @@ class Model(object):
         if engine.use_circuits():
             self.solver = ACSolver(self, engine, **kwargs)
         else:
-            self.solver = MCSolver(self, engine)
+            self.solver = MCSolver(self, engine, memoizer)
         register_tensor_predicates(engine)
 
     def solve(self, batch: Sequence[Query]) -> List[Result]:

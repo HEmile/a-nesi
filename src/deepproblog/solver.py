@@ -129,6 +129,7 @@ class MCSolver(Solver):
         self,
         model: "Model",
         engine: "MCEngine",
+        memoizer: Optional[Memoizer]=None
     ):
         """
 
@@ -139,7 +140,9 @@ class MCSolver(Solver):
         self.model = model
         self.program = self.engine.prepare(model.program)
         # TODO: What if people use different mappers?
-        self.memoizer = Memoizer(DefaultQueryMapper())
+        self.memoizer = memoizer
+        if not memoizer:
+            self.memoizer = Memoizer(DefaultQueryMapper())
 
 
     def solve(self, batch: Sequence[Query]) -> List[Result]:

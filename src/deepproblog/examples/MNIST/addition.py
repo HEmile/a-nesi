@@ -18,7 +18,9 @@ from deepproblog.heuristics import geometric_mean
 from deepproblog.model import Model
 from deepproblog.network import Network
 from deepproblog.sampling.grad_estim import factory_storch_method
-from deepproblog.sampling.sampler import Sampler
+from deepproblog.sampling.mapo_sampler import MemoryAugmentedDPLSampler
+from deepproblog.sampling.memoizer import Memoizer
+from deepproblog.sampling.sampler import Sampler, DefaultQueryMapper
 from deepproblog.train import train_model
 from deepproblog.utils import get_configuration, format_time_precise, config_to_string
 
@@ -37,13 +39,14 @@ if __name__ == '__main__':
         "batch_size": [13],
         "amt_samples": [4],
         "lr": [1e-3],
-        "importance_sampling": [False],
-        "epochs": [20]
+        "mc_method": ["memory", "normal", "importance"],
+        "epochs": [20],
+        "entropy_weight": [0.1]
     }
 
     args = get_configuration(parameters, i)
 
-    torch.manual_seed(args["run"])
+    # torch.manual_seed(args["run"])
 
     name = "addition_" + config_to_string(args) + "_" + format_time_precise()
 
@@ -59,11 +62,14 @@ if __name__ == '__main__':
         )
 
     sampler = None
+    memoizer = Memoizer(DefaultQueryMapper())
     if args["method"] == "mc":
-        if args["importance_sampling"]:
+        if args["mc_method"] == "importance":
             sampler = AdditionSampler(factory_storch_method(args["grad_estim"]), args["amt_samples"])
+        elif args["mc_method"] == "memory":
+            sampler = MemoryAugmentedDPLSampler(args["amt_samples"], memoizer, 19, args["entropy_weight"])
         else:
-            sampler = Sampler(factory_storch_method(args["grad_estim"]), args["amt_samples"], 19)  # TODO: n classes target 19 depends on the amount of digits
+            sampler = Sampler(factory_storch_method(args["grad_estim"]), args["amt_samples"], 19, args["entropy_weight"])  # TODO: n classes target 19 depends on the amount of digits
     net = Network(network, MNIST_NETWORK_NAME, sampler=sampler, batching=True)
     model = Model("models/addition.pl", [net])
 
@@ -81,7 +87,7 @@ if __name__ == '__main__':
         )
     elif args["method"] == "mc":
         model.set_engine(
-            MCEngine(model)
+            MCEngine(model), memoizer
         )
     model.add_tensor_source("train", MNIST_train)
     model.add_tensor_source("test", MNIST_test)
@@ -93,7 +99,7 @@ if __name__ == '__main__':
                         test=lambda model: get_confusion_matrix(model, test_set, verbose=1).accuracy(),
                         run_note=name,
                         tags=[args['method']],
-                        extra_config=args
+                        args=args
                         )
     model.save_state("snapshot/" + name + ".pth")
     # train.logger.comment(dumps(model.get_hyperparameters()))
