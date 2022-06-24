@@ -30,16 +30,20 @@ class Memoizer:
         # TODO: Strings can be shorter by removing the index= here, since it doesn't add anything.
         #  This just iterates... Can use that to reduce memory overhead
         for i, in_term in enumerate(sample_map.values()):
-           id += f"{i}={torch.argmax(in_term[index]).numpy()};"
+            if i > 0:
+                id += ';'
+            id += f"{i}={torch.argmax(in_term[index]).numpy()}"
         return id
 
     def _from_string_in(self, id) -> List[int]:
-        return list(map(lambda s: int(s[1]), id.split(';')))
+        return list(map(lambda s: int(s.split('=')[1]), id.split(';')))
 
     def _to_string_out(self, q_o: List[str]):
         id = ''
         for i, out_term in enumerate(q_o):
-            id += f"{i}={out_term};"
+            if i > 0:
+                id += ';'
+            id += f"{i}={out_term}"
         return id
 
     def _to_string(self, q_i: List[Term], q_o: List[str], sample_map: OrderedDict[str, torch.Tensor], index: int):
@@ -92,5 +96,7 @@ class Memoizer:
         assert self.memoize_proofs
         q_i, q_o = self.mapper(query)
         query_string = self._to_string_out(q_o)
-        return list(map(self._from_string_in, self.proof_memoizer[query_string]))
+        if query_string in self.proof_memoizer:
+            return list(map(self._from_string_in, self.proof_memoizer[query_string]))
+        return []
 
