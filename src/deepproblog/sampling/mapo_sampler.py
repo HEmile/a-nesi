@@ -1,6 +1,7 @@
 from typing import Optional, Sequence, List, Dict, Tuple
 
 import torch
+import numpy as np
 
 import storch
 from deepproblog.query import Query
@@ -17,17 +18,19 @@ class MemoryAugmentedDPLSampler(Sampler):
     """
     Implements a variant of MAPO: https://arxiv.org/abs/1807.02322 specific for DeepProbLog
     Reuses the Stochastic Beam Search for efficient computation as suggested in https://www.jmlr.org/papers/v21/19-985.html
+
+    # TODO: Assuming k_swor = 1 for now. If it works well enough, i keep it.
     """
-    def __init__(self, k: int, memoizer: Memoizer, n_classes_query:int, entropy_weight: float, mapper: QueryMapper=None):
+    def __init__(self, k_proofs: int, k_swor: int, memoizer: Memoizer, n_classes_query:int, entropy_weight: float, mapper: QueryMapper=None):
         """
 
         Args:
             plate_name:
             k: Total amount of samples. k-1 will be summed over (highest probability samples), then 1 reinforce sample
         """
-        super().__init__(None, k, n_classes_query, entropy_weight, mapper)
+        super().__init__(None, k_proofs + k_swor, n_classes_query, entropy_weight, mapper)
 
-        self.sampler = MAPOSWORSampler(k, memoizer)
+        self.sampler = MAPOSWORSampler(k_proofs, k_swor, memoizer)
         self.method = MemoryAugmentedDPLEstimator("z", self.sampler)
 
     def sample_atoms(self, queries: Sequence[Query], samples: List[Dict[str, torch.Tensor]]):
@@ -43,15 +46,17 @@ class MAPOSWORSampler(UnorderedSet):
     Implements a variant of MAPO: https://arxiv.org/abs/1807.02322 specific for DeepProbLog
     Reuses the Stochastic Beam Search for efficient computation as suggested in https://www.jmlr.org/papers/v21/19-985.html
     """
-    def __init__(self, k: int, memoizer: Memoizer):
+    def __init__(self, k_proofs: int, k_swor:int, memoizer: Memoizer):
         """
 
         Args:
-            plate_name:
-            k: Total amount of samples. k-1 will be summed over (highest probability samples), then 1 reinforce sample
+            k_buffer: Amount of proofs to sum over
+            k_swor: Amount of samples without replacement
         """
-        super().__init__("z", k)  # Note: This fixes the plate_name to z.
+        super().__init__("z", k_proofs + k_swor)  # Note: This fixes the plate_name to z.
 
+        self.k_proofs = k_proofs
+        self.k_swor = k_swor
         self.sample_index: int = None
         self.proofs_tensors: List[storch.Tensor] = []
         self.memoizer: Memoizer = memoizer
@@ -64,14 +69,17 @@ class MAPOSWORSampler(UnorderedSet):
         self.proofs_tensors = []
         if max_amt_proofs > 0:
             size_proofs = len(next(filter(lambda l: len(l) > 0, proofs_list))[0])
+            amt_proofs = min(self.k_proofs, max_amt_proofs) # TODO: Just arbitrary order for now
             for i in range(size_proofs):
-                proof_t: torch.Tensor = torch.full((len(queries), max_amt_proofs), -1, dtype=torch.long)
+                proof_t = np.full((len(queries), amt_proofs), -1, dtype=np.int32)
 
                 for q_i, proofs_for_query in enumerate(proofs_list):
                     for p_i, proof in enumerate(proofs_for_query):
+                        if p_i == amt_proofs:
+                            break
                         proof_t[q_i, p_i] = proof[i]
 
-                self.proofs_tensors.append(storch.denote_independent(proof_t, 0, "batch"))
+                self.proofs_tensors.append(storch.denote_independent(torch.tensor(proof_t), 0, "batch"))
 
         self.sample_index = 0
 
@@ -88,22 +96,20 @@ class MAPOSWORSampler(UnorderedSet):
         return filtered_plp
 
     @storch.deterministic
-    def _join(self, memoized: torch.Tensor, samples: torch.Tensor) -> torch.Tensor:
-        # Fill the -1 entries in memoized with the top-k samples
-        b, k = samples.shape
-        max_amt_proofs = memoized.shape[-1]
-        joined_sample = torch.zeros_like(samples)
-        joined_sample[:, :max_amt_proofs] = memoized
-        for query_i in range(b):
-            joined = False
-            for proof_i in range(max_amt_proofs):
-                if memoized[query_i, proof_i] == -1:
-                    joined_sample[query_i, proof_i:] = samples[query_i, :k-proof_i]
-                    joined = True
-                    break
-            if not joined:
-                joined_sample[query_i, max_amt_proofs:] = samples[query_i, :k-max_amt_proofs]
-        return joined_sample
+    def _find_log_probs(self, chosen_samples, joint_log_probs, perturbed_log_probs) -> (torch.Tensor, torch.Tensor):
+        # Gathers the log_probs of the chosen samples, making sure that -1 samples are set to -1e10
+        b, k = joint_log_probs.shape
+        chosen_samples[chosen_samples == -1] = k
+        ignore_row = torch.full((b, 1), -1e10)
+        joint_log_probs = torch.cat([joint_log_probs, ignore_row], dim=-1)
+        perturbed_log_probs = torch.cat([perturbed_log_probs, ignore_row], dim=-1)
+        joint_log_probs_sample = joint_log_probs.gather(dim=-1, index=chosen_samples)
+        perturbed_log_probs_sample = perturbed_log_probs.gather(dim=-1, index=chosen_samples)
+
+        new_chosen_samples = torch.clone(chosen_samples)
+        new_chosen_samples[new_chosen_samples == k] = 0
+        return joint_log_probs_sample, perturbed_log_probs_sample, new_chosen_samples
+
 
     def select_samples(
             self, perturbed_log_probs: storch.Tensor, joint_log_probs: storch.Tensor,
@@ -115,18 +121,13 @@ class MAPOSWORSampler(UnorderedSet):
         :param joint_log_probs: plates x (k? * |D_yv|). Joint log probabilities of the options. k is present if first_sample.
         :param first_sample:
         :return: perturbed log probs of chosen samples, joint log probs of chosen samples, index of chosen samples
+        Chosen samples have a certain structure: it starts of with the memoized samples. Since there is a variable amount
+        of memoization, this tensor is filled up with 0s. This means the first option gets chosen here!
+        The rest of the tensor (k_swor) consists of the samples without replacement.
         """
 
-        # TODO Implementation:
-        #  How to choose the correct current sampling index?
-
-        # TODO: If max_amt_proofs > self.k-1,
-        #  Then select the top k-1 proofs by joint_log_probs
-
-        # TODO:
-        #  l proofs in memoizer
-        #  Choose those l proofs to sum over
-        #  Sample k-l from the rest without replacement
+        # TODO: If max_amt_proofs > self.k_proofs
+        #  Then select the top k_proofs proofs by joint_log_probs
 
         if len(self.proofs_tensors) == 0:
             # Do a regular SWOR when no proofs have been found yet.
@@ -135,26 +136,26 @@ class MAPOSWORSampler(UnorderedSet):
         # batch x k
         # First l_i are memoized samples. The rest is -1
         memoized_samples = self.proofs_tensors[self.sample_index]
-        max_amt_proofs = memoized_samples.shape[-1]
-        size_d = int(perturbed_log_probs.shape[-1] / self.k) if self.sample_index > 0 else perturbed_log_probs.shape[-1]
+        amt_proofs = memoized_samples.shape[-1]
 
         # Map samples to the corresponding element in the k x |D| indexing.
         # Presumes that the first elements sampled are memoized
-        if self.sample_index > 0 and max_amt_proofs > 1:
-            memoized_samples += torch.range(0, max_amt_proofs, dtype=torch.long) * size_d * memoized_samples.ne(-1)
+        if self.sample_index > 0 and amt_proofs > 1:
+            size_d = int(perturbed_log_probs.shape[-1] / (amt_proofs + self.k_swor)) \
+                if self.sample_index > 0 \
+                else perturbed_log_probs.shape[-1]
+            memoized_samples += torch.arange(0, amt_proofs, dtype=torch.long).unsqueeze(0) * size_d * memoized_samples.ne(-1)
 
         # Get the top-k from the _remaining_ samples. Ie we should filter the perturbed log probs!
         filtered_plp = self._filter_perturbed_log_probs(memoized_samples, perturbed_log_probs)
-        _, top_k_samples = torch.topk(filtered_plp, self.k, dim=-1)
+        # TODO: Can also use self.k instead of self.k_swor, but this requires enabling self.k_swor > 1
+        _, top_k_samples = torch.topk(filtered_plp, self.k_swor, dim=-1)
 
-        # Merge the top k samples without replacement and the memoized samples
-        chosen_samples = self._join(memoized_samples, top_k_samples)
-
-        joint_log_probs_sample = joint_log_probs.gather(dim=-1, index=chosen_samples)
-        perturbed_log_probs_sample = perturbed_log_probs.gather(dim=-1, index=chosen_samples)
+        chosen_samples = storch.cat([memoized_samples, top_k_samples], dim=-1)
 
         self.sample_index += 1
-        return joint_log_probs_sample, perturbed_log_probs_sample, chosen_samples
+
+        return self._find_log_probs(chosen_samples, joint_log_probs, perturbed_log_probs)
 
     def weighting_function(
         self, tensor: storch.StochasticTensor, plate: AncestralPlate
@@ -166,20 +167,24 @@ class MAPOSWORSampler(UnorderedSet):
         :return:
         """
 
-        # TODO: I think this just works? Nothing to change here??
-        #  Well... If it is k-l, we need to sample the rest without replacement (which is more efficient... easier to find proofs!)
-        #  I suppose we can either use the unordered set estimator or Reinforce without replacement here.
-        #  Also the l is query-dependent... How does that work?
-        amt_samples = plate.log_probs.shape[-1]
-        if amt_samples == self.k:
-            def _priv(log_probs: torch.Tensor):
-                joint_probs = log_probs[..., :-1].exp()
-                iw_sample = (1. - joint_probs.sum(dim=-1).detach()).unsqueeze(-1)
-                weighting = torch.cat((joint_probs, iw_sample), dim=-1)
-                return weighting
-            return storch.deterministic(_priv)(plate.log_probs)
+        # TODO:
+        #  Find max_amt_samples
+        #  If part of max_amt_samples: Use sum-over, but filter wherever it is -1 and set this to probability 0
+        #  If not part of max_amt_samples: Use unordered-set-estimator
+        if len(self.proofs_tensors) == 0:
+            return super().weighting_function(tensor, plate)
 
-        return plate.log_probs.exp()
+        memoized_samples = self.proofs_tensors[0]
+        amt_proofs = memoized_samples.shape[-1]
+
+        k_swor = self.k_swor
+
+        def _priv(log_probs: torch.Tensor, memoized_samples: torch.Tensor) -> torch.Tensor:
+            joint_probs = log_probs[..., :amt_proofs].exp() * memoized_samples.ne(-1)
+            iw_sample = (1. - joint_probs.sum(dim=-1).detach()).unsqueeze(-1).expand(-1, k_swor)
+            weighting = torch.cat((joint_probs, iw_sample), dim=-1)
+            return weighting
+        return storch.deterministic(_priv)(plate.log_probs, memoized_samples._tensor)
 
 
 class MemoryAugmentedDPLEstimator(SeqMethod):

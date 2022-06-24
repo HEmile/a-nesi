@@ -37,11 +37,11 @@ if __name__ == '__main__':
         "exploration": [False, True],
         "run": range(5),
         "batch_size": [13],
-        "amt_samples": [4],
+        "amt_samples": [6],
         "lr": [1e-3],
         "mc_method": ["memory", "normal", "importance"],
         "epochs": [20],
-        "entropy_weight": [0.1]
+        "entropy_weight": [1e-6]
     }
 
     args = get_configuration(parameters, i)
@@ -67,7 +67,8 @@ if __name__ == '__main__':
         if args["mc_method"] == "importance":
             sampler = AdditionSampler(factory_storch_method(args["grad_estim"]), args["amt_samples"])
         elif args["mc_method"] == "memory":
-            sampler = MemoryAugmentedDPLSampler(args["amt_samples"], memoizer, 19, args["entropy_weight"])
+            # TODO: Assumes we want equal amount of SWOR as sum-over.
+            sampler = MemoryAugmentedDPLSampler(args["amt_samples"] - 1, 1, memoizer, 19, args["entropy_weight"])
         else:
             sampler = Sampler(factory_storch_method(args["grad_estim"]), args["amt_samples"], 19, args["entropy_weight"])  # TODO: n classes target 19 depends on the amount of digits
     net = Network(network, MNIST_NETWORK_NAME, sampler=sampler, batching=True)

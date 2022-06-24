@@ -294,7 +294,7 @@ def estimate(model: "Model", program: ClauseDB, batch: Sequence[Query], memoizer
         from deepproblog.sampling.parallel import run_proof_threads
         all_costs = run_proof_threads(model, sample_map, batch, sampler.n)
     else:
-        all_costs = run_proofs_sync(program, sample_map, batch, memoizer, sampler.n)
+        all_costs = run_proofs_sync(program, sample_map, batch, memoizer, next(iter(sample_map[0].values())).shape[0])
 
     parents: [storch.StochasticTensor] = []
     for network in model.networks.values():
