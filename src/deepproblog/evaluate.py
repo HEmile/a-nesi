@@ -2,6 +2,7 @@ from collections import defaultdict
 from statistics import mean
 from typing import Optional
 
+import storch
 from deepproblog.dataset import Dataset
 from deepproblog.model import Model
 from deepproblog.utils.confusion_matrix import ConfusionMatrix
@@ -53,6 +54,7 @@ def get_confusion_matrix(
                         )
                     )
             confusion_matrix.add_item(predicted, actual)
+        storch.reset()
 
     if verbose > 0:
         print(confusion_matrix)

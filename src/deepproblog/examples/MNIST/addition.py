@@ -93,8 +93,8 @@ if __name__ == '__main__':
 
     loader = DataLoader(train_set, args["batch_size"], False)
     train = train_model(model, loader, args["epochs"],
-                        log_iter=1,
-                        test_iter=1,
+                        log_iter=100,
+                        test_iter=1000,
                         profile=0,
                         test=lambda model: get_confusion_matrix(model, test_set, verbose=1).accuracy(),
                         run_note=name,

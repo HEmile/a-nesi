@@ -3,7 +3,18 @@ from typing import List, Union
 import numpy as np
 
 from deepproblog.utils import TabularFormatter
+import re
 
+def atoi(text):
+    return int(text) if text.isdigit() else text
+
+def natural_keys(text):
+    '''
+    alist.sort(key=natural_keys) sorts in human order
+    http://nedbatchelder.com/blog/200712/human_sorting.html
+    (See Toothy's implementation in the comments)
+    '''
+    return [ atoi(c) for c in re.split(r'(\d+)', text) ]
 
 class ConfusionMatrix(object):
     def __init__(self, classes: Union[int, List[str]] = 0):
@@ -33,14 +44,16 @@ class ConfusionMatrix(object):
 
         self.matrix[predicted_i, actual_i] += 1
 
-    def __str__(self):
+    def __str__(self, sort_by_class = True):
         formatter = TabularFormatter()
-        data = [[""] * (self.n + 2), ["", ""] + self.classes]
+        permutation = sorted(range(len(self.classes)), key=lambda i: natural_keys(self.classes[i])) if sort_by_class else range(self.n)
+        classes_s = [self.classes[i] for i in permutation]
+        data = [[""] * (self.n + 2), ["", ""] + classes_s] + [] * self.n
         data[0][(self.n + 1) // 2 + 1] = "Actual"
-        for row in range(self.n):
+        for row in permutation:
             data.append(
-                [" ", self.classes[row]]
-                + [str(self.matrix[row, col]) for col in range(self.n)]
+                [" ", classes_s[row]]
+                + [str(self.matrix[row, col]) for col in permutation]
             )
         data[len(data) // 2][0] = "Predicted"
         return formatter.format(data)
