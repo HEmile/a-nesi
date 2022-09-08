@@ -1,3 +1,4 @@
+import random
 from typing import Optional, Sequence, List, Dict, Tuple
 
 import torch
@@ -46,7 +47,7 @@ class MAPOSWORSampler(UnorderedSet):
     Implements a variant of MAPO: https://arxiv.org/abs/1807.02322 specific for DeepProbLog
     Reuses the Stochastic Beam Search for efficient computation as suggested in https://www.jmlr.org/papers/v21/19-985.html
     """
-    def __init__(self, k_proofs: int, k_swor:int, memoizer: Memoizer):
+    def __init__(self, k_proofs: int, k_swor:int, memoizer: Memoizer, clipping_threshold: float=0.2):
         """
 
         Args:
@@ -61,6 +62,7 @@ class MAPOSWORSampler(UnorderedSet):
         self.proofs_tensors: List[storch.Tensor] = []
         self.memoizer: Memoizer = memoizer
         self.proofs: List = []
+        self.clipping_threshold = clipping_threshold
 
     def prepare_sampling(self, queries: Sequence[Query]):
         proofs_list: List[List[List[int]]] = list(map(self.memoizer.get_proofs, queries))
@@ -74,6 +76,9 @@ class MAPOSWORSampler(UnorderedSet):
                 proof_t = np.full((len(queries), amt_proofs), -1, dtype=np.int32)
 
                 for q_i, proofs_for_query in enumerate(proofs_list):
+                    if len(proofs_for_query) > self.k_proofs:
+                        # TODO: Smarter proof sampling
+                        proofs_for_query = random.sample(proofs_for_query, self.k_proofs)
                     for p_i, proof in enumerate(proofs_for_query):
                         if p_i == amt_proofs:
                             break
@@ -168,9 +173,13 @@ class MAPOSWORSampler(UnorderedSet):
         """
 
         # TODO:
+        #  Optimization: Do not compute for self.sample_index < len(self.proofs_tensors)
+        # TODO:
         #  Find max_amt_samples
         #  If part of max_amt_samples: Use sum-over, but filter wherever it is -1 and set this to probability 0
         #  If not part of max_amt_samples: Use unordered-set-estimator
+        # TODO:
+        #  Seeing some very high log_probs every now and then? Even if the distribution doesn't reflect this possibility
         if len(self.proofs_tensors) == 0:
             return super().weighting_function(tensor, plate)
 
@@ -178,11 +187,20 @@ class MAPOSWORSampler(UnorderedSet):
         amt_proofs = memoized_samples.shape[-1]
 
         k_swor = self.k_swor
+        clipping_threshold = self.clipping_threshold
 
         def _priv(log_probs: torch.Tensor, memoized_samples: torch.Tensor) -> torch.Tensor:
-            joint_probs = log_probs[..., :amt_proofs].exp() * memoized_samples.ne(-1)
-            iw_sample = (1. - joint_probs.sum(dim=-1).detach()).unsqueeze(-1).expand(-1, k_swor)
-            weighting = torch.cat((joint_probs, iw_sample), dim=-1)
+            has_proof = memoized_samples.ne(-1)
+            joint_probs = log_probs[..., :amt_proofs].exp() * has_proof
+
+            buffer_weight = joint_probs.sum(dim=-1).detach()
+            biased_buffer_weight = buffer_weight.clamp(min=clipping_threshold)
+            has_any_proof = has_proof.any(dim=-1)
+            iw_sum = torch.where(has_any_proof, biased_buffer_weight / buffer_weight, buffer_weight)
+            joint_probs_weighted = joint_probs * iw_sum.unsqueeze(1)
+            iw_sample = (1 - torch.where(has_any_proof, biased_buffer_weight, buffer_weight)).unsqueeze(-1).expand(-1, k_swor)
+
+            weighting = torch.cat((joint_probs_weighted, iw_sample), dim=-1)
             return weighting
         return storch.deterministic(_priv)(plate.log_probs, memoized_samples._tensor)
 
