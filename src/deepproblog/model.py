@@ -6,7 +6,7 @@ from collections import defaultdict
 from io import BytesIO
 from os import PathLike
 from random import random
-from typing import Collection, Optional, Tuple, List, Mapping, Any, Sequence, Union, Dict
+from typing import Collection, Optional, Tuple, List, Mapping, Any, Sequence, Union, Dict, Literal
 from zipfile import ZipFile
 
 import torch
@@ -24,8 +24,6 @@ from .sampling.memoizer import Memoizer
 from .semiring import Result
 from .solver import ACSolver, Solver, MCSolver
 from .utils import check_path
-
-
 
 
 class Model(object):
@@ -108,8 +106,8 @@ class Model(object):
             self.solver = MCSolver(self, engine, memoizer)
         register_tensor_predicates(engine)
 
-    def solve(self, batch: Sequence[Query]) -> List[Result]:
-        return self.solver.solve(batch)
+    def solve(self, batch: Sequence[Query], mode: Literal['learn', 'estimate']='learn') -> List[Result]:
+        return self.solver.solve(batch, mode)
 
     def ground_dataset(self, dataset: Dataset):
         total_time = 0

@@ -8,7 +8,7 @@ from deepproblog.utils.confusion_matrix import ConfusionMatrix
 
 
 def get_confusion_matrix(
-    model: Model, dataset: Dataset, verbose: int = 0, eps: Optional[float] = None
+    model: Model, dataset: Dataset, verbose: int = 0, eps: Optional[float] = None, batch_size: int = 1000
 ) -> ConfusionMatrix:
     """
 
@@ -22,31 +22,37 @@ def get_confusion_matrix(
     """
     confusion_matrix = ConfusionMatrix()
     model.eval()
-    for i, gt_query in enumerate(dataset.to_queries()):
-        test_query = gt_query.variable_output()
-        answer = model.solve([test_query])[0]
-        actual = str(gt_query.output_values()[0])
-        if len(answer.result) == 0:
-            predicted = "no_answer"
-            if verbose > 1:
-                print("no answer for query {}".format(gt_query))
-        else:
-            max_ans = max(answer.result, key=lambda x: answer.result[x])
-            p = answer.result[max_ans]
-            if eps is None:
-                predicted = str(max_ans.args[gt_query.output_ind[0]])
+    queries = dataset.to_queries()
+    for i in range(0, len(queries), batch_size):
+        gt_queries = queries[i : i+batch_size]
+        batch = list(map(lambda gt_query: gt_query.variable_output(), gt_queries))
+        answers = model.solve(batch, 'estimate')
+        actuals = list(map(lambda gt_query: str(gt_query.output_values()[0]), gt_queries))
+        for j in range(batch_size):
+            answer = answers[j]
+            gt_query = gt_queries[j]
+            actual = actuals[j]
+            if len(answer.result) == 0:
+                predicted = "no_answer"
+                if verbose > 1:
+                    print("no answer for query {}".format(gt_query))
             else:
-                predicted = float(max_ans.args[gt_query.output_ind[0]])
-                actual = float(gt_query.output_values()[0])
-                if abs(actual - predicted) < eps:
-                    predicted = actual
-            if verbose > 1 and actual != predicted:
-                print(
-                    "{} {} vs {}::{} for query {}".format(
-                        i, actual, p, predicted, test_query
+                max_ans = max(answer.result, key=lambda x: answer.result[x])
+                p = answer.result[max_ans]
+                if eps is None:
+                    predicted = str(max_ans.args[gt_query.output_ind[0]])
+                else:
+                    predicted = float(max_ans.args[gt_query.output_ind[0]])
+                    actual = float(gt_query.output_values()[0])  # EMILE: Why convert to float and not int?
+                    if abs(actual - predicted) < eps:
+                        predicted = actual
+                if verbose > 1 and actual != predicted:
+                    print(
+                        "{} {} vs {}::{} for query {}".format(
+                            i, actual, p, predicted, batch[j]
+                        )
                     )
-                )
-        confusion_matrix.add_item(predicted, actual)
+            confusion_matrix.add_item(predicted, actual)
 
     if verbose > 0:
         print(confusion_matrix)
@@ -72,7 +78,7 @@ def get_fact_accuracy(
     model.eval()
     probabilities = defaultdict(list)
     for i, query in enumerate(dataset.to_queries()):
-        answer = model.solve([query])[0]
+        answer = model.solve([query], 'estimate')[0]
         if len(answer.result) == 0:
             predicted = "no_answer"
             if verbose > 1:

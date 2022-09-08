@@ -1,5 +1,9 @@
+from __future__ import annotations
 from collections import OrderedDict
-from typing import Optional, Dict, List, Set
+from dataclasses import dataclass
+from typing import Optional, Dict, List, Set, TYPE_CHECKING
+if TYPE_CHECKING:
+    from sample import ProofResult
 
 import torch
 
@@ -7,6 +11,12 @@ from deepproblog.query import Query
 
 from deepproblog.sampling.sampler import QueryMapper
 from problog.logic import Term
+
+@dataclass
+class Memoized:
+    found_solution: bool
+    solution: Optional[Term]
+    counterExamples: Optional[Set[str]] = None
 
 
 class Memoizer:
@@ -16,13 +26,14 @@ class Memoizer:
     The main use for this is reusing previous proofs: This process is deterministic, so we don't need to recompute it.
 
     Additionally, we optionally save prolog programs that prove the query for the MAPO algorithm.
+    TODO: Assumes there is only one query that is correct
     """
     def __init__(self, mapper: QueryMapper, memoize_proofs=True, size=10000):
         self.mapper = mapper
-        self.memory: OrderedDict[str, bool] = OrderedDict()
+        self.memory: OrderedDict[str, Memoized] = OrderedDict()
         self.size = size
-        self.memoize_proofs = memoize_proofs
         self.proof_memoizer: Dict[str, Set[str]] = {}
+        self.memoize_proofs = memoize_proofs
 
 
     def _to_string_in(self, sample_map: OrderedDict[str, torch.Tensor], index: int):
@@ -38,7 +49,7 @@ class Memoizer:
     def _from_string_in(self, id) -> List[int]:
         return list(map(lambda s: int(s.split('=')[1]), id.split(';')))
 
-    def _to_string_out(self, q_o: List[str]):
+    def _to_string_out(self, q_o: List[Term]) -> str:
         id = ''
         for i, out_term in enumerate(q_o):
             if i > 0:
@@ -46,45 +57,62 @@ class Memoizer:
             id += f"{i}={out_term}"
         return id
 
-    def _to_string(self, q_i: List[Term], q_o: List[str], sample_map: OrderedDict[str, torch.Tensor], index: int):
-        # We are not using the name of the input terms, because those differ over iterations (eg train(0) and train(2)...)
-        # End results are deterministic given an output.
-        return f"I[{self._to_string_in(sample_map, index)}]O[{self._to_string_out(q_o)}]"
+    def query_to_string(self, query: Query) -> str:
+        _, q_o = self.mapper(query)
+        return self._to_string_out(q_o)
 
-    def lookup(self, query: Query, sample_map: OrderedDict[str, torch.Tensor]) -> List[Optional[int]]:
-        from deepproblog.sampling.sample import COST_FOUND_PROOF, COST_NO_PROOF
+    def lookup(self, sample_map: OrderedDict[str, torch.Tensor]) -> List[Optional[Memoized]]:
         res = []
         n = next(sample_map.values().__iter__()).size(0)
-        q_i, q_o = self.mapper(query)
         for i in range(n):
-            as_string = self._to_string(q_i, q_o, sample_map, i)
-            if as_string in self.memory:
-                if self.memory[as_string]:
-                    res.append(COST_FOUND_PROOF)
-                else:
-                    res.append(COST_NO_PROOF)
+            as_string_in = self._to_string_in(sample_map, i)
+            if as_string_in in self.memory:
+                res.append(self.memory[as_string_in])
             else:
                 res.append(None)
         return res
 
-    def add(self, query: Query, sample_map: OrderedDict[str, torch.Tensor], costs: List[int]):
+    def add(self, query: Query, sample_map: OrderedDict[str, torch.Tensor], results: ProofResult):
         from deepproblog.sampling.sample import COST_FOUND_PROOF
-        q_i, q_o = self.mapper(query)
-        for i in range(len(costs)):
-            as_string = self._to_string(q_i, q_o, sample_map, i)
-            if as_string in self.memory:
+
+        _, q_o = self.mapper(query)
+
+        n = len(results.costs) if results.costs else len(results.completions)
+        for i in range(n):
+            proof_string = self._to_string_in(sample_map, i)
+            proof_in_memory = proof_string in self.memory
+
+            if proof_in_memory:
                 # Needed to reset position in queue
-                self.memory.move_to_end(as_string, last=True)
-            else:
-                found_proof = costs[i] == COST_FOUND_PROOF
-                self.memory[as_string] = found_proof
-                if found_proof and self.memoize_proofs:
-                    query_string = self._to_string_out(q_o)
-                    proof_string = self._to_string_in(sample_map, i)
-                    if query_string in self.proof_memoizer:
-                        self.proof_memoizer[query_string].add(proof_string)
+                self.memory.move_to_end(proof_string, last=True)
+
+            if results.costs:
+                query_string = self._to_string_out(q_o)
+                found_proof = results.costs[i] == COST_FOUND_PROOF
+                if proof_in_memory:
+                    # Needed to reset position in queue
+                    memo = self.memory[proof_string]
+                    if not memo.found_solution:
+                        if found_proof:
+                            memo.counterExamples = None
+                            memo.found_solution = True
+                            memo.solution = query.query
+                        else:
+                            memo.counterExamples.add(query_string)
+                else:
+                    if found_proof:
+                        self.memory[proof_string] = Memoized(True, solution=query.query)
+                        if self.memoize_proofs:
+                            if query_string in self.proof_memoizer:
+                                self.proof_memoizer[query_string].add(proof_string)
+                            else:
+                                self.proof_memoizer[query_string] = {proof_string}
                     else:
-                        self.proof_memoizer[query_string] = {proof_string}
+                        self.memory[proof_string] = Memoized(False, None, counterExamples={query_string})
+            elif not proof_in_memory:
+                # Not a ground query, but we have not saved the proof yet
+                self.memory[proof_string] = Memoized(True, solution=results.completions[i])
+
 
     def update(self):
         diff = len(self.memory) - self.size

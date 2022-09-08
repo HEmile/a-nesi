@@ -1,6 +1,4 @@
 import sys
-from json import dumps
-
 import torch
 
 from deepproblog.dataset import DataLoader
@@ -38,7 +36,7 @@ if __name__ == '__main__':
         "run": range(5),
         "batch_size": [13],
         "amt_samples": [6],
-        "lr": [1e-3],
+        "lr": [1e-2],
         "mc_method": ["memory", "normal", "importance"],
         "epochs": [20],
         "entropy_weight": [1e-6]
@@ -95,7 +93,8 @@ if __name__ == '__main__':
 
     loader = DataLoader(train_set, args["batch_size"], False)
     train = train_model(model, loader, args["epochs"],
-                        log_iter=100,
+                        log_iter=1,
+                        test_iter=1,
                         profile=0,
                         test=lambda model: get_confusion_matrix(model, test_set, verbose=1).accuracy(),
                         run_note=name,

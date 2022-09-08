@@ -48,6 +48,7 @@ class Semiring(ProbLogSemiring, ABC):
         pass
 
 
+
 class Result(object):
     """
     A class that contains the result and timing info for evaluating a query.
@@ -61,9 +62,6 @@ class Result(object):
         compile_time: Optional[float] = None,
         eval_time: Optional[float] = None,
         proof: Optional[LogicFormula] = None,
-        found_proof: Dict[Term, storch.Tensor] = None,
-        stoch_tensors: List[storch.StochasticTensor]=None,
-        is_batched: bool=True
     ):
         """Construct object
 
@@ -85,9 +83,7 @@ class Result(object):
         self.compile_time = compile_time
         self.eval_time = eval_time
         self.proof = proof
-        self.found_proof = found_proof
-        self.stoch_tensors = stoch_tensors
-        self.is_batched = is_batched
+
 
     def __iter__(self):
         return iter(self.result.keys())
@@ -97,3 +93,15 @@ class Result(object):
 
     def __repr__(self):
         return repr(self.result)
+
+class Results(List[Result]):
+    def __init__(self, *args, found_proof: Dict[Term, storch.Tensor] = None,
+            stoch_tensors: List[storch.StochasticTensor] = None,
+            prob_tensor: Optional[storch.Tensor] = None,
+            batch_time: Optional[float] = None):
+        list.__init__(self, *args)
+        self.prob_tensor = prob_tensor
+        self.stoch_tensors = stoch_tensors
+        self.found_proof = found_proof
+        self.batch_time = batch_time
+

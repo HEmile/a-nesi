@@ -20,7 +20,7 @@ if TYPE_CHECKING:
 
 
 # These map queries to input terms and outputs
-QueryMapper = Callable[[Query], Tuple[List[Term], List[str]]]
+QueryMapper = Callable[[Query], Tuple[List[Term], List[Term]]]
 
 
 class DefaultQueryMapper(QueryMapper):
@@ -68,7 +68,11 @@ class Sampler(torch.nn.Module):
 
             # TODO: How to generalize this?
             #  It assumes always only 1 target
-            target_l.append(one_hot(torch.tensor(int(q_o[0])), self.n_classes_query))
+            if q_o[0].is_constant():
+                target_l.append(one_hot(torch.tensor(int(q_o[0])), self.n_classes_query))
+            else:
+                # If no supervision signal is given, just predict every option
+                target_l.append(torch.ones(self.n_classes_query))
 
         n_i_terms = len(inputs[0])
 
@@ -83,6 +87,7 @@ class Sampler(torch.nn.Module):
             dists.append(dist)
         method: Method = self.create_method(dists, target_l)
         for index_term, dist in enumerate(dists):
+            # print(dist)
             # Call storchastic sample method
             # TODO: How to combine this with MAPO? We already implemented the memoizer, can we move that to storch?
             # def print_grad(x):

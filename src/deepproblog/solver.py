@@ -1,12 +1,12 @@
 import traceback
 from time import time
-from typing import Type, TYPE_CHECKING, Optional, List, Sequence
+from typing import Type, TYPE_CHECKING, Optional, List, Sequence, Literal
 
 from deepproblog.arithmetic_circuit import ArithmeticCircuit
 from deepproblog.engines import Engine
 from deepproblog.query import Query
 from deepproblog.sampling.memoizer import Memoizer
-from deepproblog.sampling.sample import estimate
+from deepproblog.sampling.sample import dpl_mc
 from deepproblog.sampling.sampler import Sampler, DefaultQueryMapper
 from deepproblog.semiring import Result
 from deepproblog.semiring.graph_semiring import GraphSemiring, Semiring
@@ -26,7 +26,7 @@ class SolverException(Exception):
 class Solver(object):
     engine: Engine
 
-    def solve(self, batch: Sequence[Query]) -> List[Result]:
+    def solve(self, batch: Sequence[Query], mode: Literal['learn', 'estimate']='learn') -> List[Result]:
         """
         Performs inference for a batch of queries.
         :param batch: A list of queries to perform inference on.
@@ -93,7 +93,7 @@ class ACSolver(Solver):
         ac = ArithmeticCircuit(ground, self.semiring, ground_time=ground_time)
         return ac
 
-    def solve(self, batch: Sequence[Query]) -> List[Result]:
+    def solve(self, batch: Sequence[Query], mode: Literal['learn', 'estimate']='learn') -> List[Result]:
         """
         Performs inference for a batch of queries.
         :param batch: A list of queries to perform inference on.
@@ -145,7 +145,7 @@ class MCSolver(Solver):
             self.memoizer = Memoizer(DefaultQueryMapper())
 
 
-    def solve(self, batch: Sequence[Query]) -> List[Result]:
+    def solve(self, batch: Sequence[Query], mode: Literal['learn', 'estimate']='learn') -> List[Result]:
         """
         Performs inference for a batch of queries.
         :param batch: A list of queries to perform inference on.
@@ -153,7 +153,7 @@ class MCSolver(Solver):
         """
         self.engine.tensor_store.clear()
 
-        results = estimate(self.model, self.program, batch, self.memoizer)
+        results = dpl_mc(self.model, self.program, batch, self.memoizer, mode)
 
         return results
 
