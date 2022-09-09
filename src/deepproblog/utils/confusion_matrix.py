@@ -52,7 +52,7 @@ class ConfusionMatrix(object):
         data[0][(self.n + 1) // 2 + 1] = "Actual"
         for row in permutation:
             data.append(
-                [" ", classes_s[row]]
+                [" ", self.classes[row]]
                 + [str(self.matrix[row, col]) for col in permutation]
             )
         data[len(data) // 2][0] = "Predicted"

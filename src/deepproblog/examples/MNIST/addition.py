@@ -39,7 +39,7 @@ if __name__ == '__main__':
         "lr": [1e-2],
         "mc_method": ["memory", "normal", "importance"],
         "epochs": [20],
-        "entropy_weight": [1e-6]
+        "entropy_weight": [0]
     }
 
     args = get_configuration(parameters, i)
@@ -94,7 +94,7 @@ if __name__ == '__main__':
     loader = DataLoader(train_set, args["batch_size"], False)
     train = train_model(model, loader, args["epochs"],
                         log_iter=100,
-                        test_iter=1000,
+                        test_iter=100,
                         profile=0,
                         test=lambda model: get_confusion_matrix(model, test_set, verbose=1).accuracy(),
                         run_note=name,

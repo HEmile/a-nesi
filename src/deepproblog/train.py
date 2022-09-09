@@ -150,30 +150,32 @@ class TrainObject(object):
                         assert result.found_proof is not None
 
                         # # TODO: Can there ever be multiple keys? (ie multiple queries?
-                    # #  Also: Should they then be combined like this?
-                    # # Old code, we assume batching now
-                    # if r.is_batched:
-                    #     storch.add_cost(r.found_proof, 'found_proof_c')
-                    #     self.accumulated_loss += storch.reduce_plates(r.found_proof.float())._tensor.data
-                    #     # TODO: IS Probability
-                    #     #  I don't know what I meant with this TODO.
-                    #     self.IS_probability += torch.mean(r.found_proof._tensor.double())
-                    # else:
-                    #     for q in r.found_proof:
-                    #         storch.add_cost(r.found_proof[q], f'found_proof_{q}')
-                    #         self.accumulated_loss += torch.mean(r.found_proof[q]._tensor.double()) / len(result)
-                    # Apply entropy minimization (positive) or maximization (negative)
-                    # for s in r.stoch_tensors:
-                    #     storch.add_cost(0.1*s.distribution.entropy(), f'entropy_{s.name}')
+                        # #  Also: Should they then be combined like this?
+                        # # Old code, we assume batching now
+                        # if r.is_batched:
+                        #     storch.add_cost(r.found_proof, 'found_proof_c')
+                        #     self.accumulated_loss += storch.reduce_plates(r.found_proof.float())._tensor.data
+                        #     # TODO: IS Probability
+                        #     #  I don't know what I meant with this TODO.
+                        #     self.IS_probability += torch.mean(r.found_proof._tensor.double())
+                        # else:
+                        #     for q in r.found_proof:
+                        #         storch.add_cost(r.found_proof[q], f'found_proof_{q}')
+                        #         self.accumulated_loss += torch.mean(r.found_proof[q]._tensor.double()) / len(result)
+                        # Apply entropy minimization (positive) or maximization (negative)
+                        # for s in r.stoch_tensors:
+                        #     storch.add_cost(0.1*s.distribution.entropy(), f'entropy_{s.name}')
 
-                    # assumes all costs are entropy
-                        self.entropy += sum(map(lambda c: storch.reduce_plates(c)._tensor.data, storch.costs())) / (len(storch.costs()) * args["entropy_weight"])
+                        # assumes all costs are entropy
+                        #     self.entropy += sum(map(lambda c: storch.reduce_plates(c)._tensor.data, storch.costs())) / (len(storch.costs()) * args["entropy_weight"])
 
                         storch.add_cost(-result.found_proof, 'found_proof_c')
-                        self.proof_prob += storch.reduce_plates(
-                            result.found_proof / (COST_FOUND_PROOF - COST_NO_PROOF) + 1/2
+                        iteration_prob = storch.reduce_plates(
+                            result.found_proof / float(COST_FOUND_PROOF - COST_NO_PROOF) + 1/2
                         )._tensor.data
+                        self.proof_prob += iteration_prob
                         self.accumulated_loss += storch.backward()
+                        print(iteration_prob)
                     else:
                         if with_negatives:
                             loss = self.get_loss_with_negatives(batch, loss_function)

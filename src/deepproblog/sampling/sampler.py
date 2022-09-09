@@ -98,7 +98,7 @@ class Sampler(torch.nn.Module):
             entropy = -(dist * (dist + 1e-9).log()).sum(-1)
             # print(storch.reduce_plates(entropy))
             # 0.1 worked fine for score function
-            storch.add_cost(-self.entropy_weight*entropy, f'entropy_{index_term}')
+            # storch.add_cost(-self.entropy_weight*entropy, f'entropy_{index_term}')
 
             sample = self._sample(dist, index_term, method)
             self.samples.append(sample)

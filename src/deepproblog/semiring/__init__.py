@@ -95,7 +95,7 @@ class Result(object):
         return repr(self.result)
 
 class Results(List[Result]):
-    def __init__(self, *args, found_proof: Dict[Term, storch.Tensor] = None,
+    def __init__(self, *args, found_proof: storch.Tensor = None,
             stoch_tensors: List[storch.StochasticTensor] = None,
             prob_tensor: Optional[storch.Tensor] = None,
             batch_time: Optional[float] = None):

@@ -15,7 +15,7 @@ from problog.logic import Term
 @dataclass
 class Memoized:
     found_solution: bool
-    solution: Optional[Term]
+    solution: Optional[str]
     counterExamples: Optional[Set[str]] = None
 
 
@@ -43,10 +43,11 @@ class Memoizer:
         for i, in_term in enumerate(sample_map.values()):
             if i > 0:
                 id += ';'
+            # TODO: I kind of forgot what this argmax did
             id += f"{i}={torch.argmax(in_term[index]).numpy()}"
         return id
 
-    def _from_string_in(self, id) -> List[int]:
+    def from_string(self, id) -> List[int]:
         return list(map(lambda s: int(s.split('=')[1]), id.split(';')))
 
     def _to_string_out(self, q_o: List[Term]) -> str:
@@ -80,28 +81,25 @@ class Memoizer:
         n = len(results.costs) if results.costs else len(results.completions)
         for i in range(n):
             proof_string = self._to_string_in(sample_map, i)
-            proof_in_memory = proof_string in self.memory
+            memo = self.memory.get(proof_string, None)
 
-            if proof_in_memory:
+            if memo:
                 # Needed to reset position in queue
                 self.memory.move_to_end(proof_string, last=True)
 
             if results.costs:
                 query_string = self._to_string_out(q_o)
                 found_proof = results.costs[i] == COST_FOUND_PROOF
-                if proof_in_memory:
-                    # Needed to reset position in queue
-                    memo = self.memory[proof_string]
-                    if not memo.found_solution:
-                        if found_proof:
-                            memo.counterExamples = None
-                            memo.found_solution = True
-                            memo.solution = query.query
-                        else:
-                            memo.counterExamples.add(query_string)
-                else:
+                if memo and not memo.found_solution:
                     if found_proof:
-                        self.memory[proof_string] = Memoized(True, solution=query.query)
+                        memo.counterExamples = None
+                        memo.found_solution = True
+                        memo.solution = query_string
+                    else:
+                        memo.counterExamples.add(query_string)
+                elif not memo:
+                    if found_proof:
+                        self.memory[proof_string] = Memoized(True, solution=query_string)
                         if self.memoize_proofs:
                             if query_string in self.proof_memoizer:
                                 self.proof_memoizer[query_string].add(proof_string)
@@ -109,9 +107,10 @@ class Memoizer:
                                 self.proof_memoizer[query_string] = {proof_string}
                     else:
                         self.memory[proof_string] = Memoized(False, None, counterExamples={query_string})
-            elif not proof_in_memory:
+            elif not memo:
                 # Not a ground query, but we have not saved the proof yet
-                self.memory[proof_string] = Memoized(True, solution=results.completions[i])
+                query_string = self._to_string_out(self.mapper(Query(results.completions[i]))[1])
+                self.memory[proof_string] = Memoized(True, solution=query_string)
 
 
     def update(self):
@@ -125,6 +124,6 @@ class Memoizer:
         q_i, q_o = self.mapper(query)
         query_string = self._to_string_out(q_o)
         if query_string in self.proof_memoizer:
-            return list(map(self._from_string_in, self.proof_memoizer[query_string]))
+            return list(map(self.from_string, self.proof_memoizer[query_string]))
         return []
 

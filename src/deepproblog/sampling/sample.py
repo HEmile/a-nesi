@@ -51,7 +51,7 @@ from deepproblog.sampling.memoizer import Memoizer
 from problog.clausedb import ClauseDB
 from problog.engine_stack import FixedContext
 from problog.errors import GroundingError
-from problog.logic import Term
+from problog.logic import Term, Constant
 
 from problog.program import LogicProgram
 
@@ -239,7 +239,7 @@ class ProofResult:
 
     mode: Literal['estimate', 'learn']
 
-    completions: Optional[List[Term]]
+    completions: Optional[List[str]]
 
     costs: Optional[List[int]]
 
@@ -251,17 +251,8 @@ def _single_proof(program: LogicProgram, query: Query, sample_map: OrderedDict[s
     proof_results = ProofResult(mode, [] if mode == 'estimate' else None, None)
 
     # TODO:
-    #  Figure out whether a query is a constant ground atom or an open query with a random variable
-    #  If it's constant, learn with cost functions
-    #  If it's a random variable (for testing), return a distribution
-    #  I think, get a distribution over possible outputs by converting to string and then creating a dictionary or sth??
     #  AC does result: Dict[Term, Union[float, torch.Tensor]],
-    #  Problem is though that I need to use the storchastic weighting... So ehm, maybe it should create like a one-hot
-    #  tensor that storchastic reduces to one over probabilities?
     #  That thing would be the torch.Tensor. And the I need to figure out the proper corresponding term. Probably a Variable term
-    #  This thing shouldn't be returning a list of integers, though. In that case, it would be a... well also a list of integers, technically
-    #  ... but then one that finds the right variables. I don't think this really generalizes anyways.
-    #  Alternatively, I can generalize this by always returning a one-hot index, where it is -1 if false or sth.
 
     engine = init_engine()
 
@@ -284,6 +275,7 @@ def _single_proof(program: LogicProgram, query: Query, sample_map: OrderedDict[s
         if len(list(filter(lambda c: c is None, proof_results.costs))) == 0:
             return proof_results
     else:
+        # TODO: These memoizations (memo.solution) are of the form 0:index. These need to parse to a term together with the query
         proof_results.completions = [
             None if not memo else (
                 (memo.solution if memo.found_solution else None)
@@ -373,22 +365,42 @@ def dpl_mc(model: "Model", program: ClauseDB, batch: Sequence[Query], memoizer: 
         completion_to_index: Dict[Term, Tuple[int, int]] = dict()
         index_to_completion: List[Dict[int, Term]] = [dict() for _ in range(len(batch))]
         indexes = torch.zeros((len(batch), n), dtype=torch.long)
+
         for batch_i, proof in enumerate(all_proofs):
             for j, completion in enumerate(proof.completions):
+                if isinstance(completion, Term):
+                    term = completion
+                else:
+                    # Transform the completion string into a term
+                    query = batch[batch_i]
+                    query_s = query.substitute().query
+                    completion_ints = memoizer.from_string(completion)
+                    substitution: Dict[str, Constant] = dict()
+                    for output_ind in query.output_ind:
+                        substitution[query_s.args[output_ind]] = Constant(completion_ints[output_ind])
+                    term = query_s.apply(substitution)
+
+                # Assign the term into the right datastructure
                 index = -1
                 if completion in completion_to_index:
-                    _, index = completion_to_index[completion]
+                    _, index = completion_to_index[term]
                 else:
                     index = len(index_to_completion[batch_i])
-                    index_to_completion[batch_i][index] = completion
-                    completion_to_index[completion] = batch_i, index
+                    index_to_completion[batch_i][index] = term
+                    completion_to_index[term] = batch_i, index
                 indexes[batch_i, j] = index
+
+        # Transform the different completions into a one-hot tensor
         if not batch_first:
             indexes = indexes.T
         one_hot = F.one_hot(indexes)
         one_hot = storch.Tensor(one_hot, parents, plates, "one_hot")
+
+        # Average the one-hot tensor to get a probability matrix. Uses Storchastic to do proper weighting
         prob_tensor = storch.reduce_plates(one_hot, 'z')
         _probs = prob_tensor.detach_tensor()
+
+        # Assign the probabilities to the right query
         for batch_i in range(len(batch)):
             r: Dict[Term, torch.Tensor] = {}
             if all_proofs[0].completions:
