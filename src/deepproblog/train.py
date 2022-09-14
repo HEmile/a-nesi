@@ -136,8 +136,6 @@ class TrainObject(object):
 
             with torch.autograd.set_detect_anomaly(False):
                 for batch in loader:
-                    #     break
-                    # while True:
                     if self.interrupt:
                         break
                     self.i += 1
