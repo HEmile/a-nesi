@@ -151,17 +151,6 @@ class TrainObject(object):
 
                         # # TODO: Can there ever be multiple keys? (ie multiple queries?
                         # #  Also: Should they then be combined like this?
-                        # # Old code, we assume batching now
-                        # if r.is_batched:
-                        #     storch.add_cost(r.found_proof, 'found_proof_c')
-                        #     self.accumulated_loss += storch.reduce_plates(r.found_proof.float())._tensor.data
-                        #     # TODO: IS Probability
-                        #     #  I don't know what I meant with this TODO.
-                        #     self.IS_probability += torch.mean(r.found_proof._tensor.double())
-                        # else:
-                        #     for q in r.found_proof:
-                        #         storch.add_cost(r.found_proof[q], f'found_proof_{q}')
-                        #         self.accumulated_loss += torch.mean(r.found_proof[q]._tensor.double()) / len(result)
                         # Apply entropy minimization (positive) or maximization (negative)
                         # for s in r.stoch_tensors:
                         #     storch.add_cost(0.1*s.distribution.entropy(), f'entropy_{s.name}')
@@ -175,7 +164,6 @@ class TrainObject(object):
                         )._tensor.data
                         self.proof_prob += iteration_prob
                         self.accumulated_loss += storch.backward()
-                        print(iteration_prob)
                     else:
                         if with_negatives:
                             loss = self.get_loss_with_negatives(batch, loss_function)
@@ -217,7 +205,7 @@ class TrainObject(object):
         if self.i % log_iter == 0:
             to_log = {"iteration": self.i}
             print(
-                "Iteration: ",
+                "Time since last log: ",
                 self.i,
                 "\ts:%.4f" % (iter_time - self.prev_iter_time),
                 "\tAverage Loss: ",

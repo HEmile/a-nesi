@@ -1,9 +1,6 @@
 from typing import TYPE_CHECKING, Callable, Sequence, Dict, List, Tuple, OrderedDict
 
-import random
-
-from distutils.dist import Distribution
-
+import itertools
 import torch
 
 from deepproblog.engines.builtins import one_hot
@@ -24,14 +21,23 @@ QueryMapper = Callable[[Query], Tuple[List[Term], List[Term]]]
 
 
 class DefaultQueryMapper(QueryMapper):
-    def __call__(self, query: Query):
+    def __call__(self, query: Query) -> Tuple[List[Term], List[Term]]:
         query_s = query.substitute()
-        inputs = list(map(lambda arg: Term(".", arg, Term('[]')), query_s.query.args))
+        inputs = list(map(self._deconstruct_term, query_s.query.args))
         # Delete outputs
         for ind in query.output_ind:
             del inputs[ind]
+        inputs = list(itertools.chain(*inputs))
         outputs = list(map(lambda ind: query.query.args[ind], query.output_ind))
         return inputs, outputs
+
+    def _deconstruct_term(self, term: Term) -> List[Term]:
+        if term.functor == '.':
+            return list(itertools.chain(*map(self._deconstruct_term, term.args)))
+        if term.functor == '[]':
+            return []
+
+        return [Term(".", term, Term('[]'))]
 
 def print_samples(samples: List):
     for od in samples:
@@ -80,7 +86,7 @@ class Sampler(torch.nn.Module):
         dists: [storch.Tensor] = []
         self.samples = []
         for index_term in range(n_i_terms):
-            d_tensors = [res[to_eval[n_i_terms * i + index_term]] for i in range(int(len(res) / 2))]
+            d_tensors = [res[to_eval[n_i_terms * i + index_term]] for i in range(len(queries))]
             dist = torch.stack(d_tensors)
             # Assume first dimension (the one stacked over) is batch dimension. Is this correct?
             dist = storch.denote_independent(dist, 0, 'batch')

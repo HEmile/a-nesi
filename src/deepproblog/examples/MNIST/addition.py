@@ -28,15 +28,15 @@ if __name__ == '__main__':
     i = int(sys.argv[1]) if len(sys.argv) > 1 else 0
 
     parameters = {
-        "method": ["mc", "exact", "gm"],
+        "method": ["gm", "mc", "exact", "gm"],
         "grad_estim": ["vanilla-sf", "rao-blackwell", "hybrid-baseline"],
-        "N": [1, 2, 3],
+        "N": [2, 1, 2, 3],
         "pretrain": [0],
         "exploration": [False, True],
         "run": range(5),
         "batch_size": [13],
         "amt_samples": [6],
-        "lr": [1e-2],
+        "lr": [1e-3],
         "mc_method": ["memory", "normal", "importance"],
         "epochs": [20],
         "entropy_weight": [0]
@@ -61,14 +61,15 @@ if __name__ == '__main__':
 
     sampler = None
     memoizer = Memoizer(DefaultQueryMapper())
+    n_classes = 2 * 10**args["N"] - 1
     if args["method"] == "mc":
         if args["mc_method"] == "importance":
             sampler = AdditionSampler(factory_storch_method(args["grad_estim"]), args["amt_samples"])
         elif args["mc_method"] == "memory":
             # TODO: Assumes we want equal amount of SWOR as sum-over.
-            sampler = MemoryAugmentedDPLSampler(args["amt_samples"] - 1, 1, memoizer, 19, args["entropy_weight"])
+            sampler = MemoryAugmentedDPLSampler(args["amt_samples"] - 1, 1, memoizer, n_classes, args["entropy_weight"])
         else:
-            sampler = Sampler(factory_storch_method(args["grad_estim"]), args["amt_samples"], 19, args["entropy_weight"])  # TODO: n classes target 19 depends on the amount of digits
+            sampler = Sampler(factory_storch_method(args["grad_estim"]), args["amt_samples"], n_classes, args["entropy_weight"])  # TODO: n classes target 19 depends on the amount of digits
     net = Network(network, MNIST_NETWORK_NAME, sampler=sampler, batching=True)
     model = Model("models/addition.pl", [net])
 
@@ -94,7 +95,7 @@ if __name__ == '__main__':
     loader = DataLoader(train_set, args["batch_size"], False)
     train = train_model(model, loader, args["epochs"],
                         log_iter=100,
-                        test_iter=100,
+                        test_iter=10000,
                         profile=0,
                         test=lambda model: get_confusion_matrix(model, test_set, verbose=1).accuracy(),
                         run_note=name,
