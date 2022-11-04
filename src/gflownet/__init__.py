@@ -1,0 +1,1 @@
+from .gflownet import GFlowNetBase
