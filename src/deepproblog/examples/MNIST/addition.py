@@ -28,9 +28,9 @@ if __name__ == '__main__':
     i = int(sys.argv[1]) if len(sys.argv) > 1 else 0
 
     parameters = {
-        "method": ["gm", "mc", "exact", "gm"],
+        "method": ["mc", "exact", "gm"],
         "grad_estim": ["vanilla-sf", "rao-blackwell", "hybrid-baseline"],
-        "N": [2, 1, 2, 3],
+        "N": [1, 2, 3],
         "pretrain": [0],
         "exploration": [False, True],
         "run": range(5),
@@ -67,15 +67,15 @@ if __name__ == '__main__':
             sampler = AdditionSampler(factory_storch_method(args["grad_estim"]), args["amt_samples"])
         elif args["mc_method"] == "memory":
             # TODO: Assumes we want equal amount of SWOR as sum-over.
-            sampler = MemoryAugmentedDPLSampler(args["amt_samples"] - 1, 1, memoizer, n_classes, args["entropy_weight"])
+            sampler = MemoryAugmentedDPLSampler(args["amt_samples"] - 1, 1, memoizer, 'digit', n_classes, args["entropy_weight"])
         else:
-            sampler = Sampler(factory_storch_method(args["grad_estim"]), args["amt_samples"], n_classes, args["entropy_weight"])  # TODO: n classes target 19 depends on the amount of digits
+            sampler = Sampler(factory_storch_method(args["grad_estim"]), args["amt_samples"], 'digit', n_classes, args["entropy_weight"])  # TODO: n classes target 19 depends on the amount of digits
     net = Network(network, MNIST_NETWORK_NAME, sampler=sampler, batching=True)
     model = Model("models/addition.pl", [net])
 
     net.optimizer = torch.optim.Adam(net.parameters(), lr=args["lr"])
     if args["method"] == "exact":
-        if args["exploration"] or args["N"] > 2:
+        if args["exploration"]:
             print("Not supported?")
             exit()
         model.set_engine(ExactEngine(model), cache=True)

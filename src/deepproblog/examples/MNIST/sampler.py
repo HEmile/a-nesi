@@ -13,6 +13,7 @@ import storch
 
 class AdditionSampler(ImportanceSampler):
     def __init__(self, method: MethodFactory, n: int):
+        # TODO: Constructor is not up to date
         super().__init__(method, n, 19)
         self.lin1 = nn.Linear(2 * 10 + self.n_classes_query, 30)
         self.outp1 = nn.Linear(30, 10)

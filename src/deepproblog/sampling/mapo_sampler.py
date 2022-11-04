@@ -22,14 +22,15 @@ class MemoryAugmentedDPLSampler(Sampler):
 
     # TODO: Assuming k_swor = 1 for now. If it works well enough, i keep it.
     """
-    def __init__(self, k_proofs: int, k_swor: int, memoizer: Memoizer, n_classes_query:int, entropy_weight: float, mapper: QueryMapper=None):
+    def __init__(self, k_proofs: int, k_swor: int, memoizer: Memoizer, predicate_query: str, n_classes_query:int,
+                 entropy_weight: float, mapper: QueryMapper=None):
         """
 
         Args:
             plate_name:
             k: Total amount of samples. k-1 will be summed over (highest probability samples), then 1 reinforce sample
         """
-        super().__init__(None, k_proofs + k_swor, n_classes_query, entropy_weight, mapper)
+        super().__init__(None, k_proofs + k_swor, predicate_query, n_classes_query, entropy_weight, mapper)
 
         self.sampler = MAPOSWORSampler(k_proofs, k_swor, memoizer)
         self.method = MemoryAugmentedDPLEstimator("z", self.sampler)

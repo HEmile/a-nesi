@@ -32,6 +32,7 @@ class DefaultQueryMapper(QueryMapper):
         return inputs, outputs
 
     def _deconstruct_term(self, term: Term) -> List[Term]:
+        # TODO: Can probably be rewritten using logic.term2list
         if term.functor == '.':
             return list(itertools.chain(*map(self._deconstruct_term, term.args)))
         if term.functor == '[]':
@@ -52,16 +53,18 @@ class Sampler(torch.nn.Module):
     network_name: str
     mapper: QueryMapper
 
-    def __init__(self, method_factory: "MethodFactory", n: int, n_classes_query:int, entropy_weight: float, mapper: QueryMapper=None):
+    def __init__(self, method_factory: "MethodFactory", n: int, predicate_atoms: str, n_classes_query: int,
+                 entropy_weight: float, mapper: QueryMapper=None):
         super().__init__()
         if not mapper:
             self.mapper = DefaultQueryMapper()
         self.method_factory: "MethodFactory" = method_factory
         self.n = n
         self.n_classes_query = n_classes_query
+        self.predicate_atoms = predicate_atoms
         self.entropy_weight = entropy_weight
 
-    def sample_atoms(self, queries: Sequence[Query], samples: List[Dict[str, torch.Tensor]]):
+    def sample_atoms(self, queries: Sequence[Query], samples: List[Dict[Term, torch.Tensor]]):
         # TODO: For MAPO, we need to only sample from whatever is not memoized
         to_eval = []
         target_l: List[torch.Tensor] = []
@@ -101,7 +104,7 @@ class Sampler(torch.nn.Module):
             # dist.register_hook(print_grad)
 
             # TEST: Try to maximize entropy
-            entropy = -(dist * (dist + 1e-9).log()).sum(-1)
+            # entropy = -(dist * (dist + 1e-9).log()).sum(-1)
             # print(storch.reduce_plates(entropy))
             # 0.1 worked fine for score function
             # storch.add_cost(-self.entropy_weight*entropy, f'entropy_{index_term}')
@@ -112,7 +115,7 @@ class Sampler(torch.nn.Module):
             if not sample.plates[0].name == 'batch':
                 sample_t = sample_t.permute((1, 0, 2))
             for i, sample_dict in enumerate(samples):
-                sample_dict[str(Term(*to_eval[n_i_terms * i + index_term]))] = sample_t[i]
+                sample_dict[Term(self.predicate_atoms, *to_eval[n_i_terms * i + index_term])] = sample_t[i]
         # print_samples(samples)
 
     def _sample(self, dist: torch.Tensor, index_term: int, method: Method):

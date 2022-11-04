@@ -37,21 +37,17 @@ WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 See the License for the specific language governing permissions and
 limitations under the License.
 """
-import logging
-import random
 from collections import OrderedDict, defaultdict
 
 import time
 from dataclasses import dataclass
 
 import torch
-import torch.nn.functional as F
 
+from deepproblog.engines.prolog_engine.swi_program import SWIProgram
 from deepproblog.sampling.memoizer import Memoizer
 from problog.clausedb import ClauseDB
-from problog.engine_stack import FixedContext
-from problog.errors import GroundingError
-from problog.logic import Term, Constant
+from problog.logic import Term
 
 from problog.program import LogicProgram
 
@@ -61,7 +57,6 @@ import storch
 from deepproblog.query import Query
 
 from deepproblog.semiring import Result, Results
-from problog.tasks.sample import SampledFormula, init_engine
 
 if TYPE_CHECKING:
     from deepproblog.model import Model
@@ -69,170 +64,6 @@ if TYPE_CHECKING:
 COST_FOUND_PROOF = 1
 COST_NO_PROOF = -1
 
-
-class SampledFormulaDPL(SampledFormula):
-    model: "Model"
-
-    def __init__(self, sample_map: Dict[str, torch.Tensor],
-                 query_counts: int, **kwargs):
-        SampledFormula.__init__(self, **kwargs)
-        self.sample_map: Dict[str, torch.Tensor] = sample_map
-        self.query_counts = query_counts
-
-    def _is_nn_probability(self, probability: Term):
-        return probability.functor == "nn"
-
-    def add_atom(
-            self,
-            identifier: Term,
-            probability: Term,
-            group: (int, FixedContext) = None,
-            name: Term = None,
-            source=None,
-            cr_extra=True,
-            is_extra=False,
-    ):
-        # def add_atom(self, identifier, probability, group=None, name=None, source=None):
-        if probability is None:
-            return 0
-
-        if group is None:  # Simple fact
-            if identifier not in self.facts:
-                if self._is_simple_probability(probability):
-                    p = random.random()
-                    prob = float(probability)
-                    value = p < prob
-                    if value:
-                        result_node = self.TRUE
-                        self.probability *= prob
-                    else:
-                        result_node = self.FALSE
-                        self.probability *= 1 - prob
-                else:
-                    value, prob = self.sample_value(probability)
-                    self.probability *= prob
-                    result_node = self.add_value(value)
-                self.facts[identifier] = result_node
-                return result_node
-            else:
-                return self.facts[identifier]
-        else:
-            # choice = identifier[-1]
-            origin = identifier[:-1]
-            if identifier not in self.facts:
-                if self._is_simple_probability(probability):
-                    p = float(probability)
-                    if origin in self.groups:
-                        r = self.groups[origin]  # remaining probability in the group
-                    else:
-                        r = 1.0
-
-                    if r is None or r < 1e-8:
-                        # r is too small or another choice was made for this origin
-                        value = False
-                    else:
-                        value = random.random() <= p / r
-                    if value:
-                        self.probability *= p
-                        self.groups[
-                            origin
-                        ] = None  # Other choices in group are not allowed
-                    elif r is not None:
-                        self.groups[origin] = r - p  # Adjust remaining probability
-                    if value:
-                        result_node = self.TRUE
-                    else:
-                        result_node = self.FALSE
-                elif self._is_nn_probability(probability):
-                    # Sample from nn code.
-                    # TODO: This now assumes a categorical distribution. What about bernoulli?
-                    name = str(Term(probability.args[0], probability.args[1]))
-                    if name not in self.sample_map:
-                        raise AttributeError(f"NN atom {name} not in sample_map {self.sample_map}. Make sure to add it in your sampler.")
-                    sample = self.sample_map[name]
-
-                    # Lookup sample in sampled storch.Tensor
-                    # if self.sampler.n == 1:
-                    #     detach_sample = sample[self.batch_counts]
-                    # TODO: What if query_counts is 0?
-                    detach_sample = sample[self.query_counts]
-                    # Disabled for performance reasons
-                    # distr = sample.distribution
-                    # prob = distr.log_prob(detach_sample).exp()
-                    # if isinstance(prob, storch.Tensor):
-                    #     prob = prob._tensor
-                    # prob = prob.detach().numpy()
-                    # self.probability *= prob
-                    # TODO: Make sure this comparison is valid.
-                    if detach_sample[int(probability.args[2])] == 1:
-                        result_node = self.TRUE
-                    else:
-                        result_node = self.FALSE
-                else:
-                    value, prob = self.sample_value(probability)
-                    self.probability *= prob
-                    result_node = self.add_value(value)
-                self.facts[identifier] = result_node
-                return result_node
-            else:
-                return self.facts[identifier]
-
-
-def ground(engine, db, query: Term, target, assume_prepared=True) -> SampledFormulaDPL:
-    db = engine.prepare(db)
-
-    # # Old loading queries code:
-    # # Load queries: use argument if available, otherwise load from database.
-    # queries = [q[0] for q in engine.query(db, Term("query", None))]
-
-    # Evidence code
-    # evidence = engine.query(db, Term("evidence", None, None))
-    # evidence += engine.query(db, Term("evidence", None))
-    # for ev in evidence:
-    #     if not isinstance(ev[0], Term):
-    #         raise GroundingError("Invalid evidence")  # TODO can we add a location?
-
-    if not isinstance(query, Term):
-        raise GroundingError("Invalid query")  # TODO can we add a location?
-
-    # Ground queries
-    # queries = [(target.LABEL_QUERY, q) for q in queries]
-    logger = logging.getLogger("problog")
-    logger.debug("Grounding query '%s'", query)
-    target = engine.ground(db, query, target, label=target.LABEL_QUERY, assume_prepared=assume_prepared)
-    logger.debug("Ground program size: %s", len(target))
-    return target
-
-
-def init_db(engine, model: LogicProgram, propagate_evidence=False):
-    db = engine.prepare(model)
-
-    # if propagate_evidence:
-    #     evidence = engine.query(db, Term("evidence", None, None))
-    #     evidence += engine.query(db, Term("evidence", None))
-    #
-    #     ev_target = LogicFormula()
-    #     engine.ground_evidence(db, ev_target, evidence)
-    #     ev_target.lookup_evidence = {}
-    #     ev_nodes = [
-    #         node
-    #         for name, node in ev_target.evidence()
-    #         if node != 0 and node is not None
-    #     ]
-    #     ev_target.propagate(ev_nodes, ev_target.lookup_evidence)
-    #
-    #     evidence_facts = []
-    #     for query_counts, value in ev_target.lookup_evidence.items():
-    #         node = ev_target.get_node(query_counts)
-    #         if ev_target.is_true(value):
-    #             evidence_facts.append((node[0], 1.0) + node[2:])
-    #         elif ev_target.is_false(value):
-    #             evidence_facts.append((node[0], 0.0) + node[2:])
-    # else:
-    evidence_facts = []
-    ev_target = None
-
-    return db, evidence_facts, ev_target
 
 @dataclass
 class ProofResult:
@@ -249,16 +80,6 @@ def _single_proof(program: LogicProgram, query: Query, sample_map: OrderedDict[s
     correct_out = memoizer.query_to_string(query)
 
     proof_results = ProofResult(mode, [] if mode == 'estimate' else None, None)
-
-    # TODO:
-    #  AC does result: Dict[Term, Union[float, torch.Tensor]],
-    #  That thing would be the torch.Tensor. And the I need to figure out the proper corresponding term. Probably a Variable term
-
-    engine = init_engine()
-
-    # TODO: Does propagate evidence speed things up?
-    # TODO: Can this part be moved out of single_proof?
-    db, evidence, ev_target = init_db(engine, program, False)  # Assume propagate evidence is false
 
     is_ground_query = all(map(lambda t: t.is_constant(), memoizer.mapper(query)[1]))
     assert is_ground_query and mode == 'learn' or mode == 'estimate'
@@ -295,23 +116,18 @@ def _single_proof(program: LogicProgram, query: Query, sample_map: OrderedDict[s
         if not is_ground_query and proof_results.completions[sample_count] is not None:
             continue
         # TODO: If not batched, ensure it gets result correctly
-        target = SampledFormulaDPL(sample_map, sample_count)
-        # for ev_fact in evidence:
-        #     target.add_atom(*ev_fact)
-        result: SampledFormulaDPL = ground(engine, db, queryS, target=target)
 
-        # TODO: Right now, the code assumes result.queries() only returns a single tuple. What if there is more?
-        for name, truth_value in result.queries():
-            if is_ground_query:
-                if name == queryS and truth_value == result.TRUE:
-                    proof_results.costs[sample_count] = COST_FOUND_PROOF
-                else:
-                    proof_results.costs[sample_count] = COST_NO_PROOF
-            else:
-                assert truth_value == result.TRUE
-                proof_results.completions[sample_count] = name
+        # # TODO: Right now, the code assumes result.queries() only returns a single tuple. What if there is more?
+        # for name, truth_value in result.queries():
+        #     if is_ground_query:
+        #         if name == queryS and truth_value == result.TRUE:
+        #             proof_results.costs[sample_count] = COST_FOUND_PROOF
+        #         else:
+        #             proof_results.costs[sample_count] = COST_NO_PROOF
+        #     else:
+        #         assert truth_value == result.TRUE
+        #         proof_results.completions[sample_count] = name
 
-        engine.previous_result = result
     memoizer.add(query, sample_map, proof_results)
     return proof_results
 
@@ -321,14 +137,14 @@ def run_proofs_sync(program: LogicProgram, sample_map: List[OrderedDict[str, tor
 
 
 # noinspection PyUnusedLocal
-def dpl_mc(model: "Model", program: ClauseDB, batch: Sequence[Query], memoizer: Memoizer, mode: Literal["estimate", "learn"],
+def dpl_mc(model: "Model", program: SWIProgram, batch: Sequence[Query], memoizer: Memoizer, mode: Literal["estimate", "learn"],
            propagate_evidence=False, amount_workers=4, parallel=False, **kwdargs) -> List[Result]:
     # Initial version will not support evidence propagation.
     start_time = time.time()
 
     # TODO: Calculate how long this takes
     # This map gets reused over multiple samples of the same query, so we do not query the NN model unnecessarily
-    sample_map: List[OrderedDict[str, torch.Tensor]] = [OrderedDict() for _ in range(len(batch))]
+    sample_map: List[OrderedDict[Term, torch.Tensor]] = [OrderedDict() for _ in range(len(batch))]
 
     # TODO: What if there are multiple networks + samplers?
     for network in model.networks.values():
@@ -337,7 +153,7 @@ def dpl_mc(model: "Model", program: ClauseDB, batch: Sequence[Query], memoizer: 
         break
 
     n = next(iter(sample_map[0].values())).shape[0]
-    all_proofs = run_proofs_sync(program, sample_map, batch, memoizer, n, mode)
+    # all_proofs = run_proofs_sync(program, sample_map, batch, memoizer, n, mode)
 
     parents: [storch.StochasticTensor] = []
     for network in model.networks.values():
@@ -350,71 +166,72 @@ def dpl_mc(model: "Model", program: ClauseDB, batch: Sequence[Query], memoizer: 
     results = []
     prob_tensor = None
 
-    if all_proofs[0].costs:
-        # Convert the 'costs' (high if found no proof, otherwise low) into a Storch Tensor for averaging
-        cost_tensor = torch.tensor(list(map(lambda r: r.costs, all_proofs)))
-        if not batch_first:
-            cost_tensor = cost_tensor.T
-        sampler.update_sampler(cost_tensor)
-        memoizer.update()
-        # TODO: May not work if the sampling method has more than 2 dimensions
-        found_proof = storch.Tensor(cost_tensor, parents, plates, "found_proof")
-    if all_proofs[0].completions:
-        # Use Storchastic to average the different completions together. There might be duplicates!
-        # TODO: Ensure that the hashing function properly recognizes duplicates.
-        completion_to_index: Dict[Term, Tuple[int, int]] = dict()
-        index_to_completion: List[Dict[int, Term]] = [dict() for _ in range(len(batch))]
-        indexes = torch.zeros((len(batch), n), dtype=torch.long)
-
-        for batch_i, proof in enumerate(all_proofs):
-            for j, completion in enumerate(proof.completions):
-                if isinstance(completion, Term):
-                    term = completion
-                else:
-                    # Transform the completion string into a term
-                    query = batch[batch_i]
-                    query_s = query.substitute().query
-                    completion_ints = memoizer.from_string(completion)
-                    substitution: Dict[str, Constant] = dict()
-                    for output_ind in query.output_ind:
-                        substitution[query_s.args[output_ind]] = Constant(completion_ints[output_ind])
-                    term = query_s.apply(substitution)
-
-                # Assign the term into the right datastructure
-                index = -1
-                if completion in completion_to_index:
-                    _, index = completion_to_index[term]
-                else:
-                    index = len(index_to_completion[batch_i])
-                    index_to_completion[batch_i][index] = term
-                    completion_to_index[term] = batch_i, index
-                indexes[batch_i, j] = index
-
-        # Transform the different completions into a one-hot tensor
-        if not batch_first:
-            indexes = indexes.T
-        one_hot = F.one_hot(indexes)
-        one_hot = storch.Tensor(one_hot, parents, plates, "one_hot")
-
-        # Average the one-hot tensor to get a probability matrix. Uses Storchastic to do proper weighting
-        prob_tensor = storch.reduce_plates(one_hot, 'z')
-        _probs = prob_tensor.detach_tensor()
-
-        # Assign the probabilities to the right query
-        for batch_i in range(len(batch)):
-            r: Dict[Term, torch.Tensor] = {}
-            if all_proofs[0].completions:
-                dist = _probs[batch_i]
-                index_to_completion_b = index_to_completion[batch_i]
-                for j in range(dist.shape[-1]):
-                    if j in index_to_completion_b:
-                        r[index_to_completion_b[j]] = dist[j]
-            results.append(r)
-    if len(results) == 0:
-        results.append({})
-    query_time = time.time() - start_time
-
-    result_l = list(map(lambda r: Result(r), results))
-    return Results(result_l,
-                   found_proof=found_proof, batch_time=query_time,
-                   stoch_tensors=parents, prob_tensor=prob_tensor)
+    return None
+    # if all_proofs[0].costs:
+    #     # Convert the 'costs' (high if found no proof, otherwise low) into a Storch Tensor for averaging
+    #     cost_tensor = torch.tensor(list(map(lambda r: r.costs, all_proofs)))
+    #     if not batch_first:
+    #         cost_tensor = cost_tensor.T
+    #     sampler.update_sampler(cost_tensor)
+    #     memoizer.update()
+    #     # TODO: May not work if the sampling method has more than 2 dimensions
+    #     found_proof = storch.Tensor(cost_tensor, parents, plates, "found_proof")
+    # if all_proofs[0].completions:
+    #     # Use Storchastic to average the different completions together. There might be duplicates!
+    #     # TODO: Ensure that the hashing function properly recognizes duplicates.
+    #     completion_to_index: Dict[Term, Tuple[int, int]] = dict()
+    #     index_to_completion: List[Dict[int, Term]] = [dict() for _ in range(len(batch))]
+    #     indexes = torch.zeros((len(batch), n), dtype=torch.long)
+    #
+    #     for batch_i, proof in enumerate(all_proofs):
+    #         for j, completion in enumerate(proof.completions):
+    #             if isinstance(completion, Term):
+    #                 term = completion
+    #             else:
+    #                 # Transform the completion string into a term
+    #                 query = batch[batch_i]
+    #                 query_s = query.substitute().query
+    #                 completion_ints = memoizer.from_string(completion)
+    #                 substitution: Dict[str, Constant] = dict()
+    #                 for output_ind in query.output_ind:
+    #                     substitution[query_s.args[output_ind]] = Constant(completion_ints[output_ind])
+    #                 term = query_s.apply(substitution)
+    #
+    #             # Assign the term into the right datastructure
+    #             index = -1
+    #             if completion in completion_to_index:
+    #                 _, index = completion_to_index[term]
+    #             else:
+    #                 index = len(index_to_completion[batch_i])
+    #                 index_to_completion[batch_i][index] = term
+    #                 completion_to_index[term] = batch_i, index
+    #             indexes[batch_i, j] = index
+    #
+    #     # Transform the different completions into a one-hot tensor
+    #     if not batch_first:
+    #         indexes = indexes.T
+    #     one_hot = F.one_hot(indexes)
+    #     one_hot = storch.Tensor(one_hot, parents, plates, "one_hot")
+    #
+    #     # Average the one-hot tensor to get a probability matrix. Uses Storchastic to do proper weighting
+    #     prob_tensor = storch.reduce_plates(one_hot, 'z')
+    #     _probs = prob_tensor.detach_tensor()
+    #
+    #     # Assign the probabilities to the right query
+    #     for batch_i in range(len(batch)):
+    #         r: Dict[Term, torch.Tensor] = {}
+    #         if all_proofs[0].completions:
+    #             dist = _probs[batch_i]
+    #             index_to_completion_b = index_to_completion[batch_i]
+    #             for j in range(dist.shape[-1]):
+    #                 if j in index_to_completion_b:
+    #                     r[index_to_completion_b[j]] = dist[j]
+    #         results.append(r)
+    # if len(results) == 0:
+    #     results.append({})
+    # query_time = time.time() - start_time
+    #
+    # result_l = list(map(lambda r: Result(r), results))
+    # return Results(result_l,
+    #                found_proof=found_proof, batch_time=query_time,
+    #                stoch_tensors=parents, prob_tensor=prob_tensor)
