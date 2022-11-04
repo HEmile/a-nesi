@@ -1,0 +1,1 @@
+from gfn_mnistadd_exact import GFlowNetExact
