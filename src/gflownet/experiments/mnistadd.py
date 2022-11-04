@@ -18,7 +18,7 @@ if __name__ == '__main__':
     i = int(sys.argv[1]) if len(sys.argv) > 1 else 0
 
     parameters = {
-        "method": ["gfnexact"],
+        "method": ["gfn"],
         "grad_estim": ["vanilla-sf", "rao-blackwell", "hybrid-baseline"],
         "N": [1, 2, 3],
         "run": range(5),
