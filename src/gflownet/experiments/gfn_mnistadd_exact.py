@@ -39,3 +39,6 @@ class GFlowNetExact(GFlowNetBase):
             second_comp = rang >= query - 9
             return torch.logical_and(first_comp, second_comp).int()
         raise NotImplementedError()
+
+    def loss(self, success: torch.Tensor) -> torch.Tensor:
+        return 0.

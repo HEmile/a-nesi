@@ -1,6 +1,7 @@
 import sys
 import torch
 import wandb
+import math
 from torch.utils.data import DataLoader
 
 from gflownet.experiments.data import (
@@ -54,24 +55,36 @@ if __name__ == '__main__':
         mode="disabled"
     )
 
-    for epoch in range(args["epochs"]):
-        print("----------------------------------------")
-        print("NEW EPOCH", epoch)
-        cum_loss = 0
-        cum_prob = 0
-        for i, batch in enumerate(loader):
-            optimizer_p.zero_grad()
-            numb1, numb2, label = batch
+    with torch.autograd.set_detect_anomaly(True):
+        for epoch in range(args["epochs"]):
+            print("----------------------------------------")
+            print("NEW EPOCH", epoch)
+            cum_loss_p = 0
+            cum_loss_gfn = 0
+            cum_prob = 0
+            print(len(loader))
+            for i, batch in enumerate(loader):
+                optimizer_p.zero_grad()
+                numb1, numb2, label = batch
 
-            loss, succes_p = model(numb1, numb2, label, args["amt_samples"])
+                loss_p, loss_gfn, succes_p = model(numb1, numb2, label, args["amt_samples"])
 
-            cum_loss += loss.item()
-            cum_prob += succes_p.mean().item()
-            loss.backward()
-            optimizer_p.step()
-            if (i + 1) % LOG_ITER == 0:
-                print(cum_loss / LOG_ITER, cum_prob / LOG_ITER)
-                wandb.log({"loss": cum_loss / LOG_ITER, "succes_prob": cum_prob / LOG_ITER})
-                cum_loss = 0
-                cum_prob = 0
+                if epoch < 2:
+                    # First just explore and train the gfn before training the 'actor'
+                    # Scales by how well the gfn is doing. If it's confident, it will put more weight on the loss
+                    # print(math.exp(-loss_gfn.detach()))
+                    loss_p *= 0
+
+                cum_loss_p += loss_p.item()
+                cum_loss_gfn += loss_gfn.item()
+                cum_prob += succes_p.mean().item()
+                (loss_p + loss_gfn).backward()
+                optimizer_p.step()
+                if (i + 1) % LOG_ITER == 0:
+                    print(cum_loss_p / LOG_ITER, cum_loss_gfn / LOG_ITER, cum_prob / LOG_ITER)
+                    wandb.log({"loss": (cum_loss_p + cum_loss_gfn) / LOG_ITER, "succes_prob": cum_prob / LOG_ITER,
+                               "sf_loss": cum_loss_p / LOG_ITER, "gfn_loss": cum_loss_gfn / LOG_ITER})
+                    cum_loss_p = 0
+                    cum_loss_gfn = 0
+                    cum_prob = 0
 

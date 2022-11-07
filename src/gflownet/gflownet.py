@@ -12,5 +12,9 @@ class GFlowNetBase(ABC, nn.Module):
     def sample(self, p1: torch.Tensor, p2: torch.Tensor, query: torch.Tensor, amt_samples=1) -> Tuple[List[torch.Tensor], List[torch.Tensor]]:
         pass
 
+    @abstractmethod
+    def loss(self, success: torch.Tensor) -> torch.Tensor:
+        pass
+
     def __call__(self, *args):
         return self.sample(*args)
