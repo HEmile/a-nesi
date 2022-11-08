@@ -81,7 +81,7 @@ if __name__ == '__main__':
                 optimizer_p.step()
                 if (i + 1) % LOG_ITER == 0:
                     total_cum_loss = cum_loss_p + cum_loss_mcgfn + cum_loss_wmcgfn
-                    print(cum_loss_p / LOG_ITER, cum_loss_mcgfn / LOG_ITER, cum_prob / LOG_ITER)
+                    print(cum_loss_p / LOG_ITER, cum_loss_mcgfn / LOG_ITER, cum_loss_wmcgfn / LOG_ITER, cum_prob / LOG_ITER)
                     wandb.log({"loss": total_cum_loss / LOG_ITER, "succes_prob_train": cum_prob / LOG_ITER,
                                "sf_loss": cum_loss_p / LOG_ITER, "mcgfn_loss": cum_loss_mcgfn / LOG_ITER,
                                "wmcgfn_loss": cum_loss_wmcgfn / LOG_ITER})

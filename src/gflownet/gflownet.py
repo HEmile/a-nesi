@@ -132,12 +132,12 @@ class GFlowNetBase(ABC, nn.Module, Generic[ST]):
         # Product over forward probabilities
         x = torch.stack(result.forward_probabilities, -1).prod(-1)
         # Multiply with partition Z
-        x *= result.partitions[0]
+        x = x * result.partitions[0].unsqueeze(-1)
 
         y = result.final_state.success.float()
         if is_wmc:
             # Reward function for weighted model counting weights models by their probability
-            y *= result.final_state.log_prob().exp()
+            y = y * result.final_state.log_prob().exp()
         return nn.BCELoss()(x, y)
 
 
@@ -189,13 +189,26 @@ class NeSyGFlowNet(GFlowNetBase[ST]):
             if should_unsqueeze:
                 action = action.unsqueeze(-1)
             # Update states
-            flows_mc.append(mc_result.final_flow.gather(-1, action))
-            partitions_mc.append(mc_result.partitions[0])
-            forward_probabilities_mc.append(mc_result.final_distribution.gather(-1, action))
+            mc_flow = mc_result.final_flow.gather(-1, action)
+            mc_p = mc_result.final_distribution.gather(-1, action)
 
-            flows_wmc.append(wmc_result.final_flow.gather(-1, action))
+            wmc_flow = wmc_result.final_flow.gather(-1, action)
+            wmc_p = wmc_result.final_distribution.gather(-1, action)
+
+            if len(mc_flow.shape) > 2:
+                mc_flow = mc_flow.squeeze(-1)
+                mc_p = mc_p.squeeze(-1)
+                wmc_flow = wmc_flow.squeeze(-1)
+                wmc_p = wmc_p.squeeze(-1)
+
+
+            flows_mc.append(mc_flow)
+            partitions_mc.append(mc_result.partitions[0])
+            forward_probabilities_mc.append(mc_p)
+
+            flows_wmc.append(wmc_flow)
             partitions_wmc.append(wmc_result.partitions[0])
-            forward_probabilities_wmc.append(wmc_result.final_distribution.gather(-1, action))
+            forward_probabilities_wmc.append(wmc_p)
 
             if should_unsqueeze:
                 action = action.squeeze(-1)
@@ -218,6 +231,7 @@ class NeSyGFlowNet(GFlowNetBase[ST]):
         greedy_flow = flow * prior
         greedy_dist = greedy_flow / greedy_flow.sum(-1).unsqueeze(-1)
         sample_shape = (amt_samples,) if amt_samples > 1 else ()
+        # TODO: This is instable, because it's possible that the greedy flow is almost 0 everywhere
         samples = Categorical(greedy_dist).sample(sample_shape)
         if amt_samples > 1:
             samples = samples.T
