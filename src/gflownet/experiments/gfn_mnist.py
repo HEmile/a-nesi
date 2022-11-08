@@ -18,70 +18,57 @@ class GFNMnistMC(GFlowNetBase[MNISTAddState]):
 
     def __init__(self, N: int, hidden_size: int = 200, memoizer_size=100, replay_size=5):
         super().__init__()
-        if N > 1:
-            raise NotImplementedError()
         self.n_classes = 2 * 10 ** N - 1
         self.N = N
-        # Assume N=1 for now
-        self.hidden_1 = nn.Linear(self.n_classes, hidden_size)
-        self.output_1 = nn.Linear(hidden_size, 10)
 
-        self.hidden_2 = nn.Linear(self.n_classes + 10, hidden_size)
-        self.output_2 = nn.Linear(hidden_size, 10)
+        self.query_mc = torch.nn.Parameter(torch.randn(1, self.n_classes) + 2, requires_grad=True)
 
+        self.hiddens = nn.ModuleList([nn.Linear(self.n_classes + i * 10, hidden_size) for i in range(2 * N)])
+        self.outputs = nn.ModuleList([nn.Linear(hidden_size, 10) for _ in range(2 * N)])
+
+        # TODO: Reimplement this (properly, with only saving unique memos)
         self.memoizer: List[Tuple[int, int, int]] = []
         self.replay_size = replay_size
         self.memoizer_size = memoizer_size
 
     def flow(self, state: MNISTAddState) -> torch.Tensor:
         if state.constraint is None:
-            # TODO
-            raise NotImplementedError()
-        d1, _ = state.state
-        query_oh = one_hot(state.constraint, self.n_classes).float()
-        if len(d1) == 0:
-            z1 = torch.relu(self.hidden_1(query_oh))
-            # Predict amount of models for each digit
-            return nn.functional.softplus(self.output_1(z1))
-        else:
-            d1_oh = one_hot(d1[0], 10).float()
-            z2 = torch.relu(self.hidden_2(torch.cat([query_oh, d1_oh], -1)))
-            return torch.sigmoid(self.output_2(z2))
+            return nn.functional.softplus(self.query_mc)
+
+        ds = state.state
+        inputs = torch.cat([state.oh_query] + state.oh_state, -1)
+        z = torch.relu(self.hiddens[len(ds)](inputs))
+        # Predict amount of models for each digit
+        return nn.functional.softplus(self.outputs[len(ds)](z))
 
 
 class GFNMnistWMC(GFlowNetBase[MNISTAddState]):
 
-    def __init__(self, N: int, hidden_size: int = 200, memoizer_size=100, replay_size=5):
+    def __init__(self, N: int, hidden_size: int = 200):
         super().__init__()
-        if N > 1:
-            raise NotImplementedError()
         self.n_classes = 2 * 10 ** N - 1
         self.N = N
-        # Assume N=1 for now
-        self.hidden_1 = nn.Linear(self.n_classes, hidden_size)
-        self.output_1 = nn.Linear(hidden_size, 10)
 
-        self.hidden_2 = nn.Linear(self.n_classes + 10, hidden_size)
-        self.output_2 = nn.Linear(hidden_size, 10)
+        self.hidden_query = nn.Linear(20 * N, hidden_size)
+        self.output_query = nn.Linear(hidden_size, self.n_classes)
 
-        self.memoizer: List[Tuple[int, int, int]] = []
-        self.replay_size = replay_size
-        self.memoizer_size = memoizer_size
+        self.hiddens = nn.ModuleList([nn.Linear(20 * N + self.n_classes + i * 10, hidden_size) for i in range(2 * N)])
+        self.outputs = nn.ModuleList([nn.Linear(hidden_size, 10) for _ in range(2 * N)])
 
     def flow(self, state: MNISTAddState) -> torch.Tensor:
+        p = state.probability_vector()
         if state.constraint is None:
-            # TODO
-            raise NotImplementedError()
-        d1, _ = state.state
-        query_oh = one_hot(state.constraint, self.n_classes).float()
-        if len(d1) == 0:
-            z1 = torch.relu(self.hidden_1(query_oh))
-            # Predict amount of models for each digit
-            return nn.functional.softplus(self.output_1(z1))
-        else:
-            d1_oh = one_hot(d1[0], 10).float()
-            z2 = torch.relu(self.hidden_2(torch.cat([query_oh, d1_oh], -1)))
-            return torch.sigmoid(self.output_2(z2))
+            z = torch.relu(self.hidden_query(p))
+            return torch.sigmoid(self.output_query(z))
+
+        # TODO: It has to recreate the one_hot vector every time, which is not efficient
+
+        ds = state.state
+        oh_query = state.oh_query
+        inputs = torch.cat([p, oh_query] + state.oh_state, -1)
+        z = torch.relu(self.hiddens[len(ds)](inputs))
+        # Predict amount of models for each digit
+        return nn.functional.softplus(self.outputs[len(ds)](z))
 
 
 class MNISTAddModel(nn.Module):
@@ -104,12 +91,12 @@ class MNISTAddModel(nn.Module):
         torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor]:
         # TODO: Generalize to N > 1
         N = 1
+        MNIST_in = torch.cat(MNISTd1 + MNISTd2, 1).reshape(-1, 1, 28, 28)
         # Predict the digit classification probabilities
-        p1 = self.perception_network(MNISTd1)
-        p2 = self.perception_network(MNISTd2)
-        initial_state = MNISTAddState(([p1], [p2]), N, query)
+        p = self.perception_network(MNIST_in).reshape(-1, 2* N, 10)
+        initial_state = MNISTAddState(p, N, query)
 
-        result_mc, result_wmc = self.gfn.forward(initial_state, amt_samples=amt_samples, sampler=self.greedy_sampler)
+        result_mc, result_wmc = self.gfn.forward(initial_state, amt_samples=amt_samples)
 
         # note: final_state is equal in both results
         state = result_mc.final_state
@@ -123,5 +110,5 @@ class MNISTAddModel(nn.Module):
 
         # Use success probabilities as importance weights for the samples
         loss_p = (-log_reward * p_constraint).mean()
-        loss_mc_gfn, loss_wmc_gfn = self.gfn.loss(result_mc, result_wmc)
+        loss_mc_gfn, loss_wmc_gfn = self.gfn.joint_loss(result_mc, result_wmc)
         return loss_p, loss_mc_gfn, loss_wmc_gfn, p_constraint

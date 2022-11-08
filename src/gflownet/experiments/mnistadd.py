@@ -65,7 +65,7 @@ if __name__ == '__main__':
                 optimizer_p.zero_grad()
                 numb1, numb2, label = batch
 
-                loss_p, loss_mcgfn, loss_wmcgfn, succes_p = model(numb1, numb2, label, args["amt_samples"])
+                loss_p, loss_mcgfn, loss_wmcgfn, succes_p = model([numb1], [numb2], label, args["amt_samples"])
 
                 # if epoch < 2:
                 #     # First just explore and train the gfn before training the 'actor'

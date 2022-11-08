@@ -3,10 +3,11 @@ from typing import List, Optional, Tuple
 
 import torch
 from torch import Tensor
+from torch.nn.functional import one_hot
 
 from gflownet.gflownet import StateBase
 
-StateRep = Tuple[List[Tensor], List[Tensor]]
+StateRep = List[Tensor]
 
 EPS = 1E-6
 
@@ -14,38 +15,46 @@ class MNISTAddState(StateBase):
 
     l_p: Optional[Tensor] = None
 
-    def __init__(self, probability: StateRep, N: int, constraint: Optional[Tensor] = None, state: StateRep = ([], []),
-                 sink: bool = False):
-        self.probability = probability
-        self.constraint = constraint
-        self.state = state
+    def __init__(self, probability: torch.Tensor, N: int, constraint: Optional[Tensor] = None,
+                 oh_query: Optional[Tensor] = None, state: List[Tensor] = [], oh_state: List[Tensor] = [],
+                 expanded_pw: Optional[Tensor] = None, sink: bool = False):
+        # Assuming probability is a b x 2*N x 10 Tensor
+        assert 2 * N >= len(state)
         self.N = N
-        d1s, d2s = self.state
-        assert N >= len(d1s) >= len(d2s)
+        self.pw = probability
+        self.expanded_pw = expanded_pw
+        self.constraint = constraint
+        self.oh_query = oh_query
+        if self.oh_query is None:
+            self.oh_query = one_hot(constraint, self.n_classes()).float()
+        if len(state) == 1:
+            self.oh_query = self.oh_query.unsqueeze(1).expand(-1, state[0].shape[1], -1)
+            self.expanded_pw = self.pw.flatten(1).unsqueeze(1).expand(-1, state[0].shape[1], -1)
+        self.state = state
+        if len(state) != len(oh_state):
+            raise ValueError("state and oh_state must have the same length")
+        self.oh_state = oh_state
+
         super().__init__(sink)
 
     def next_state(self, action: torch.Tensor) -> MNISTAddState:
         assert not self.sink
-        d1s, d2s = self.state
-        assert len(d1s) < self.N or (len(d2s) < self.N and len(d1s) == self.N)
+        assert len(self.state) < 2 * self.N
 
-        if len(d1s) < self.N:
-            d1s = d1s + [action]
-        else:
-            d2s = d2s + [action]
+        state = self.state + [action]
+        oh_state = self.oh_state + [one_hot(action, 10).float()]
 
-        sink = len(d1s) == self.N and len(d2s) == self.N
-        return MNISTAddState(self.probability, self.N, self.constraint, (d1s, d2s), sink)
+        sink = len(state) == 2 * self.N
+        return MNISTAddState(self.pw, self.N, self.constraint, self.oh_query, state, oh_state, self.expanded_pw, sink)
 
     def compute_success(self) -> torch.Tensor:
         assert self.state is not None
         assert self.constraint is not None
         assert self.sink
-        d1s, d2s = self.state
-        assert len(d1s) == len(d2s) == self.N
+        assert len(self.state) == 2 * self.N
         # Compute constraint, ie whether the sum of the numbers is equal to the query
-        stack1 = torch.stack([10 ** (self.N - i - 1) * d1s[i] for i in range(self.N)], -1)
-        stack2 = torch.stack([10 ** (self.N - i - 1) * d2s[i] for i in range(self.N)], -1)
+        stack1 = torch.stack([10 ** (self.N - i - 1) * self.state[:self.N][i] for i in range(self.N)], -1)
+        stack2 = torch.stack([10 ** (self.N - i - 1) * self.state[self.N:][i] for i in range(self.N)], -1)
         n1 = stack1.sum(-1)
         n2 = stack2.sum(-1)
         return n1 + n2 == self.constraint.unsqueeze(-1)
@@ -58,8 +67,8 @@ class MNISTAddState(StateBase):
             # Cached log prob
             return self.l_p
         sum = 0.
-        for d, p in zip(self.state[0]+self.state[1], self.probability[0]+self.probability[1]):
-            sum += (p + EPS).log().gather(1, d)
+        for i, d in enumerate(self.state):
+            sum += (self.pw[:, i] + EPS).log().gather(1, d)
         self.l_p = sum
         return sum
 
@@ -68,7 +77,9 @@ class MNISTAddState(StateBase):
         if self.constraint is None:
             # TODO
             raise NotImplementedError()
-        d1, d2 = self.state
-        if len(d1) < self.N:
-            return self.probability[0][len(d1)]
-        return self.probability[1][len(d2)]
+        return self.pw[:, len(self.state)]
+
+    def probability_vector(self) -> torch.Tensor:
+        if self.expanded_pw is not None:
+            return self.expanded_pw
+        return self.pw.flatten(1)
