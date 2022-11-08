@@ -1,44 +1,34 @@
 # an exact GFlowNet sampler for mnist Add
-from typing import List, Tuple
-
 import torch
-from torch.distributions import Categorical
 
 from gflownet import GFlowNetBase
+from gflownet.experiments.state import MNISTAddState
 
 
 class GFlowNetExact(GFlowNetBase):
-    def __init__(self, N):
-        super().__init__()
-        self.N = N
 
-    def sample(self, p1: torch.Tensor, p2: torch.Tensor, query: torch.Tensor, amt_samples=1) -> Tuple[List[torch.Tensor], List[torch.Tensor]]:
-        if self.N == 1:
-            # For every option, count the number of models that would be consistent with it
-            model_c = self.count_models([], query)
-            # Adjust the probabilities to be consistent with the model counts
-            unnorm_p = p1 * model_c
-            p = unnorm_p / unnorm_p.sum(-1).unsqueeze(-1)
-            # Sample from the adjusted probabilities
-            d1 = Categorical(p).sample((amt_samples,))
-            # Compute the other number, which is unique given the first
-            d2 = query - d1
-            assert (d1 + d2 == query).all()
-            return [d1], [d2]
-
-        raise NotImplementedError()
-
-    def count_models(self, sampled_digits: List[int], query: torch.Tensor) -> torch.Tensor:
-        if self.N == 1:
+    def flow(self, state: MNISTAddState) -> torch.Tensor:
+        constraint = state.constraint
+        if state.N == 1:
             # We'll do other cases later
-            assert not sampled_digits or len(sampled_digits) == 0
-            query = query.unsqueeze(-1)
-            # return query - 9 <= \
-            rang = torch.arange(10, device=query.device).unsqueeze(0)
-            first_comp = rang <= query
-            second_comp = rang >= query - 9
-            return torch.logical_and(first_comp, second_comp).int()
+
+            if not constraint:
+                # Should return the amount of models for each query
+                raise NotImplementedError()
+            d1, _ = state.state
+
+            if len(d1) == 0:
+                query = constraint.unsqueeze(-1)
+                rang = torch.arange(10, device=query.device).unsqueeze(0)
+                first_comp = rang <= query
+                second_comp = rang >= query - 9
+                return torch.logical_and(first_comp, second_comp).int()
+            else:
+                d2 = constraint - d1[0]
+                return torch.nn.functional.one_hot(d2, 10).int()
+
         raise NotImplementedError()
 
-    def loss(self, success: torch.Tensor) -> torch.Tensor:
+    def loss(self, final_state: MNISTAddState) -> torch.Tensor:
+        # This is already perfect, no need to train it :)
         return 0.
