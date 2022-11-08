@@ -12,7 +12,7 @@ class GFlowNetExact(GFlowNetBase):
         if state.N == 1:
             # We'll do other cases later
 
-            if not constraint:
+            if constraint is None:
                 # Should return the amount of models for each query
                 raise NotImplementedError()
             d1, _ = state.state

@@ -48,7 +48,11 @@ class GFlowNetBase(ABC, nn.Module, Generic[ST]):
     def __init__(self):
         super().__init__()
 
-    def forward(self, state: ST, max_steps: Optional[int] = None, amt_samples=1) -> GFlowNetResult[ST]:
+    def forward(self, state: ST, max_steps: Optional[int] = None, amt_samples=1,
+                override_sampling: Optional[Callable[[torch.Tensor, int, ST], torch.Tensor]] = None) -> GFlowNetResult[ST]:
+        # override_sampling: If None, this samples in proportion to the flow.
+        # Otherwise, this should be a function that takes the flow, the number of samples, and the state, and returns a sample
+
         # Sample (hopefully) positive worlds to estimate gradients
         flows = []
         partitions = []
@@ -60,7 +64,10 @@ class GFlowNetBase(ABC, nn.Module, Generic[ST]):
             distribution = flow / partition.unsqueeze(-1)
 
             n_samples = amt_samples if len(flows) == 0 else 1
-            action = Categorical(distribution).sample((n_samples,))
+            if override_sampling is None:
+                action = Categorical(distribution).sample((n_samples,))
+            else:
+                action = override_sampling(flow, n_samples, state)
             state = state.next_state(action)
 
             flows.append(flow.gather(-1, action))

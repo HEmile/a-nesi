@@ -19,16 +19,14 @@ if __name__ == '__main__':
     i = int(sys.argv[1]) if len(sys.argv) > 1 else 0
 
     parameters = {
-        "method": ["gfn"],
+        "method": ["gfnexact"],
         "grad_estim": ["vanilla-sf", "rao-blackwell", "hybrid-baseline"],
         "N": [1, 2, 3],
         "run": range(5),
         "batch_size": [11],
         "amt_samples": [60],
         "lr": [1e-3],
-        # "mc_method": ["memory", "normal", "importance"],
         "epochs": [20],
-        # "entropy_weight": [0]
     }
 
     # TODO: Move hyperparameter sweep to wandb sweep

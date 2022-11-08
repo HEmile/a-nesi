@@ -1,5 +1,5 @@
 import random
-from typing import Tuple, List
+from typing import Tuple, List, Union, Literal
 
 import torch
 from torch import nn, Tensor
@@ -106,7 +106,7 @@ class MNISTAddModel(nn.Module):
         # Predict the digit classification probabilities
         p1 = self.network(d1)
         p2 = self.network(d2)
-        initial_state = MNISTAddState((p1, p2), N, query)
+        initial_state = MNISTAddState(([p1], [p2]), N, query)
 
         result = self.gfn.forward(initial_state, amt_samples)
 
@@ -119,5 +119,5 @@ class MNISTAddModel(nn.Module):
 
         # Use success probabilities as importance weights for the samples
         loss_p = (-log_reward * p_constraint).mean()
-        loss_gfn = self.gfn.loss(final_state, success)
-        return loss_p, loss_gfn, succes_p
+        loss_gfn = self.gfn.loss(result)
+        return loss_p, loss_gfn, p_constraint

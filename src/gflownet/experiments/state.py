@@ -16,13 +16,13 @@ class MNISTAddState(StateBase):
 
     def __init__(self, probability: StateRep, N: int, constraint: Optional[Tensor] = None, state: StateRep = ([], []),
                  sink: bool = False):
-        super().__init__(sink)
         self.probability = probability
         self.constraint = constraint
         self.state = state
         self.N = N
         d1s, d2s = self.state
         assert N >= len(d1s) >= len(d2s)
+        super().__init__(sink)
 
     def next_state(self, action: torch.Tensor) -> MNISTAddState:
         assert not self.sink
