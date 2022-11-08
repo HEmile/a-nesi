@@ -141,7 +141,7 @@ class GFlowNetBase(ABC, nn.Module, Generic[ST]):
 class NeSyGFlowNet(GFlowNetBase[ST]):
 
     def __init__(self, mc_gfn: GFlowNetBase[ST], wmc_gfn: GFlowNetBase[ST], greedy_prob: float = 0.2,
-                 uniform_prob: float = 0.2):
+                 uniform_prob: float = 0.2, mc_flow_filter=0.01):
         # mc_gfn: Model counting GFlowNet. Might include background knowledge
         # wmc_gfn: Weighted model counting GFlowNet
         super().__init__()
@@ -149,6 +149,7 @@ class NeSyGFlowNet(GFlowNetBase[ST]):
         self.wmc_gfn = wmc_gfn
         self.greedy_prob = greedy_prob
         self.uniform_prob = uniform_prob
+        self.mc_flow_filter = mc_flow_filter
 
     def forward(self, state: ST, max_steps: Optional[int] = None, amt_samples=1,
                 sampler: Optional[Sampler] = None) -> Tuple[GFlowNetResult[ST], GFlowNetResult[ST]]:
@@ -172,7 +173,7 @@ class NeSyGFlowNet(GFlowNetBase[ST]):
             def wmc_flow_adjuster(flow: torch.Tensor, state: ST) -> torch.Tensor:
                 # Adjusts the flow such that actions for which there are no models are never sampled
                 # TODO: After this step, it's possible that the total flow is 0. This should be handled.
-                return flow * (mc_result.final_flow > 0.01).float()
+                return flow * (mc_result.final_flow > self.mc_flow_filter).float()
             wmc_result = self.wmc_gfn(state, max_steps=1, amt_samples=amt_samples, flow_pp=wmc_flow_adjuster)
 
             # Choose which result to use
@@ -194,6 +195,7 @@ class NeSyGFlowNet(GFlowNetBase[ST]):
 
             if steps:
                 steps -= 1
+
         return GFlowNetResult(state, flows_mc, partitions_mc, forward_probabilities_mc,
                               action, mc_result.final_flow, mc_result.final_distribution), \
                GFlowNetResult(state, flows_wmc, partitions_wmc, forward_probabilities_wmc,
@@ -219,11 +221,11 @@ class NeSyGFlowNet(GFlowNetBase[ST]):
         return mask * greedy_samples + (1 - mask) * uniform_samples
 
     def flow(self, state: ST) -> torch.Tensor:
-        return self.wmc_gfn.flow(state)
+        return self.wmc_gfn.flow(state) * (self.mc_gfn.flow(state) > self.mc_flow_filter).float()
 
     def joint_loss(self, result_mc: GFlowNetResult[ST], result_wmc: GFlowNetResult[ST]) -> Tuple[
         torch.Tensor, torch.Tensor]:
-        return self.wmc_gfn.loss(result_mc, True), self.mc_gfn.loss(result_wmc, False)
+        return self.mc_gfn.loss(result_mc, False), self.wmc_gfn.loss(result_wmc, True)
 
     def loss(self, result: GFlowNetResult[ST], is_wmc=True) -> torch.Tensor:
         raise NotImplementedError("Use joint_loss instead")

@@ -57,31 +57,36 @@ if __name__ == '__main__':
             print("----------------------------------------")
             print("NEW EPOCH", epoch)
             cum_loss_p = 0
-            cum_loss_gfn = 0
+            cum_loss_mcgfn = 0
+            cum_loss_wmcgfn = 0
             cum_prob = 0
             print(len(loader))
             for i, batch in enumerate(loader):
                 optimizer_p.zero_grad()
                 numb1, numb2, label = batch
 
-                loss_p, loss_gfn, succes_p = model(numb1, numb2, label, args["amt_samples"])
+                loss_p, loss_mcgfn, loss_wmcgfn, succes_p = model(numb1, numb2, label, args["amt_samples"])
 
-                if epoch < 2:
-                    # First just explore and train the gfn before training the 'actor'
-                    # Scales by how well the gfn is doing. If it's confident, it will put more weight on the loss
-                    # print(math.exp(-loss_gfn.detach()))
-                    loss_p *= 0
+                # if epoch < 2:
+                #     # First just explore and train the gfn before training the 'actor'
+                #     loss_p *= 0
 
                 cum_loss_p += loss_p.item()
-                cum_loss_gfn += loss_gfn.item()
+                cum_loss_mcgfn += loss_mcgfn.item()
+                cum_loss_wmcgfn += loss_wmcgfn.item()
                 cum_prob += succes_p.mean().item()
-                (loss_p + loss_gfn).backward()
+
+                total_loss = loss_p + loss_mcgfn + loss_wmcgfn
+                total_loss.backward()
                 optimizer_p.step()
                 if (i + 1) % LOG_ITER == 0:
-                    print(cum_loss_p / LOG_ITER, cum_loss_gfn / LOG_ITER, cum_prob / LOG_ITER)
-                    wandb.log({"loss": (cum_loss_p + cum_loss_gfn) / LOG_ITER, "succes_prob": cum_prob / LOG_ITER,
-                               "sf_loss": cum_loss_p / LOG_ITER, "gfn_loss": cum_loss_gfn / LOG_ITER})
+                    total_cum_loss = cum_loss_p + cum_loss_mcgfn + cum_loss_wmcgfn
+                    print(cum_loss_p / LOG_ITER, cum_loss_mcgfn / LOG_ITER, cum_prob / LOG_ITER)
+                    wandb.log({"loss": total_cum_loss / LOG_ITER, "succes_prob_train": cum_prob / LOG_ITER,
+                               "sf_loss": cum_loss_p / LOG_ITER, "mcgfn_loss": cum_loss_mcgfn / LOG_ITER,
+                               "wmcgfn_loss": cum_loss_wmcgfn / LOG_ITER})
                     cum_loss_p = 0
-                    cum_loss_gfn = 0
+                    cum_loss_mcgfn = 0
+                    cum_loss_wmcgfn = 0
                     cum_prob = 0
 
