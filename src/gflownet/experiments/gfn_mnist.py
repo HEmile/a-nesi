@@ -62,17 +62,6 @@ class MNISTAddModel(nn.Module):
         else:
             self.gfn = GFNMnist(N, hidden_size)
 
-    def greedy_sampler(self, flow: torch.Tensor, amt_samples: int, state: MNISTAddState) -> torch.Tensor:
-        prior = state.next_prior()
-        if len(flow.shape) == 3:
-            prior = prior.unsqueeze(1)
-        greedy_flow = flow * prior
-        greedy_dist = greedy_flow / greedy_flow.sum(-1).unsqueeze(-1)
-        sample_shape = (amt_samples,) if amt_samples > 1 else ()
-        samples = Categorical(greedy_dist).sample(sample_shape)
-        if amt_samples > 1:
-            samples = samples.T
-        return samples
 
     # Computes loss for a single batch
     def forward(self, MNISTd1: List[torch.Tensor], MNISTd2: List[torch.Tensor], query: torch.Tensor, amt_samples=1) -> Tuple[
