@@ -24,11 +24,12 @@ class GFlowNetExact(GFlowNetBase):
                 second_comp = rang >= query - 9
                 return torch.logical_and(first_comp, second_comp).int()
             else:
-                d2 = constraint - d1[0]
+                d2 = constraint.unsqueeze(-1) - d1[0]
+                # TODO: This assumes for every d1 there is a solution (ie 0 <= constraint - d1 <= 9)
                 return torch.nn.functional.one_hot(d2, 10).int()
 
         raise NotImplementedError()
 
     def loss(self, final_state: MNISTAddState) -> torch.Tensor:
         # This is already perfect, no need to train it :)
-        return 0.
+        return torch.tensor(0.)

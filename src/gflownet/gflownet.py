@@ -18,7 +18,7 @@ class StateBase(ABC):
         super().__init__()
         self.sink = sink
         if self.sink:
-            self.compute_success()
+            self.success = self.compute_success()
 
     @abstractmethod
     def compute_success(self) -> torch.Tensor:
@@ -63,6 +63,8 @@ class GFlowNetBase(ABC, nn.Module, Generic[ST]):
         partitions = []
         forward_probabilities = []
         steps = max_steps
+
+        # The main GFlowNet loop to sample trajectories
         while not state.sink and (steps is None or steps > 0):
             flow = self.flow(state)
             partition = flow.sum(-1)
@@ -70,14 +72,24 @@ class GFlowNetBase(ABC, nn.Module, Generic[ST]):
 
             n_samples = amt_samples if len(flows) == 0 else 1
             if sampler is None:
-                action = Categorical(distribution).sample((n_samples,)).T
+                sample_shape = (amt_samples,) if amt_samples > 1 else ()
+                action = Categorical(distribution).sample(sample_shape)
+                if n_samples > 1:
+                    action = action.T
             else:
                 action = sampler(flow, n_samples, state)
             state = state.next_state(action)
 
-            flows.append(flow.gather(-1, action))
+            if len(action.shape) < len(flow.shape):
+                action = action.unsqueeze(-1)
+            s_flow = flow.gather(-1, action)
+            s_dist = distribution.gather(-1, action)
+            if len(s_flow) > 2:
+                s_flow = s_flow.squeeze(-1)
+                s_dist = s_dist.squeeze(-1)
+            flows.append(s_flow)
             partitions.append(partition)
-            forward_probabilities.append(distribution.gather(-1, action))
+            forward_probabilities.append(s_dist)
             if steps:
                 steps -= 1
         final_state = state

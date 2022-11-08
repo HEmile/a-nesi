@@ -1,7 +1,6 @@
 import sys
 import torch
 import wandb
-import math
 from torch.utils.data import DataLoader
 
 from gflownet.experiments.data import (

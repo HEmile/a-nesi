@@ -44,9 +44,11 @@ class MNISTAddState(StateBase):
         d1s, d2s = self.state
         assert len(d1s) == len(d2s) == self.N
         # Compute constraint, ie whether the sum of the numbers is equal to the query
-        n1 = torch.stack([10 ** (self.N - i) * d1s[i] for i in range(self.N)]).sum(-1)
-        n2 = torch.stack([10 ** (self.N - i) * d2s[i] for i in range(self.N)]).sum(-1)
-        return n1 + n2 == self.constraint
+        stack1 = torch.stack([10 ** (self.N - i - 1) * d1s[i] for i in range(self.N)], -1)
+        stack2 = torch.stack([10 ** (self.N - i - 1) * d2s[i] for i in range(self.N)], -1)
+        n1 = stack1.sum(-1)
+        n2 = stack2.sum(-1)
+        return n1 + n2 == self.constraint.unsqueeze(-1)
 
     def n_classes(self) -> int:
         return 2 * (10 ** self.N) - 1
