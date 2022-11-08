@@ -49,40 +49,6 @@ class GFNMnist(GFlowNetBase[MNISTAddState]):
             z2 = torch.relu(self.hidden_2(torch.cat([query_oh, d1_oh], -1)))
             return torch.sigmoid(self.output_2(z2))
 
-    def loss(self, final_state: MNISTAddState, success: Tensor) -> Tensor:
-        # Save new successes in memoizer
-        b_i, s_i = success.nonzero(as_tuple=True)
-        for b, s in zip(b_i, s_i):
-            self.memoizer.append((final_state.query[b].item(), self.d1[s, b].item(), self.d2[s, b].item()))
-            if len(self.memoizer) > self.memoizer_size:
-                self.memoizer = self.memoizer[-self.memoizer_size:]
-
-        # Naive monte carlo loss (with bootstrapping). No experience replay or whatever.
-        # Non-sink RMSE loss
-        f1_sel = self.f1.gather(-1, self.d1.T).T
-        f2_sum = self.f2.sum(-1)
-        l1 = ((f1_sel - f2_sum) ** 2).mean().sqrt()
-
-        # Sink BCE loss
-        f2_sel = self.f2.gather(-1, self.d2.unsqueeze(-1)).squeeze(-1).T
-        l2 = nn.BCELoss()(f2_sel, success.float())
-
-        if len(self.memoizer) == 0:
-            return l1 + l2
-        # Experience replay
-        if len(self.memoizer) > self.replay_size:
-            memory = random.choices(self.memoizer, k=self.replay_size)
-        else:
-            memory = self.memoizer
-        # Compute loss on memory
-        q_oh = one_hot(torch.tensor([m[0] for m in memory]), self.n_classes).float()
-        d1_oh = one_hot(torch.tensor([m[1] for m in memory]), 10).float()
-        f2_mem = self._sink(d1_oh, q_oh)
-        d2_mem = torch.tensor([m[2] for m in memory])
-        f2_sel = f2_mem.gather(-1, d2_mem.unsqueeze(-1)).squeeze(-1)
-        l3 = nn.BCELoss()(f2_sel, torch.ones_like(f2_sel))
-        return l1 + l2 + l3
-
 
 class MNISTAddModel(nn.Module):
     gfn: GFlowNetBase
@@ -98,6 +64,11 @@ class MNISTAddModel(nn.Module):
         else:
             self.gfn = GFNMnist(N, hidden_size)
 
+    def greedy_sampler(self, flow: torch.Tensor, amt_samples: int, state: MNISTAddState) -> torch.Tensor:
+        greedy_flow = flow * state.next_prior()
+        greedy_dist = greedy_flow / greedy_flow.sum(-1).unsqueeze(-1)
+        return Categorical(greedy_dist).sample((amt_samples,))
+
     # Computes loss for a single batch
     def forward(self, d1: List[torch.Tensor], d2: List[torch.Tensor], query: torch.Tensor, amt_samples=1) -> Tuple[
         torch.Tensor, torch.Tensor, torch.Tensor]:
@@ -108,7 +79,7 @@ class MNISTAddModel(nn.Module):
         p2 = self.network(d2)
         initial_state = MNISTAddState(([p1], [p2]), N, query)
 
-        result = self.gfn.forward(initial_state, amt_samples)
+        result = self.gfn.forward(initial_state, amt_samples=amt_samples, sampler=self.greedy_sampler)
 
         log_p = result.final_state.log_prob()
 

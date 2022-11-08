@@ -33,6 +33,11 @@ class StateBase(ABC):
         # UNconditional log probability of the state (ie, prob of state irrespective of constraint)
         pass
 
+    @abstractmethod
+    def next_prior(self) -> torch.Tensor:
+        # Conditional probability of the next state given everything in the current state
+        pass
+
 
 ST = TypeVar("ST", bound=StateBase)
 
@@ -49,8 +54,8 @@ class GFlowNetBase(ABC, nn.Module, Generic[ST]):
         super().__init__()
 
     def forward(self, state: ST, max_steps: Optional[int] = None, amt_samples=1,
-                override_sampling: Optional[Callable[[torch.Tensor, int, ST], torch.Tensor]] = None) -> GFlowNetResult[ST]:
-        # override_sampling: If None, this samples in proportion to the flow.
+                sampler: Optional[Callable[[torch.Tensor, int, ST], torch.Tensor]] = None) -> GFlowNetResult[ST]:
+        # sampler: If None, this samples in proportion to the flow.
         # Otherwise, this should be a function that takes the flow, the number of samples, and the state, and returns a sample
 
         # Sample (hopefully) positive worlds to estimate gradients
@@ -64,10 +69,10 @@ class GFlowNetBase(ABC, nn.Module, Generic[ST]):
             distribution = flow / partition.unsqueeze(-1)
 
             n_samples = amt_samples if len(flows) == 0 else 1
-            if override_sampling is None:
-                action = Categorical(distribution).sample((n_samples,))
+            if sampler is None:
+                action = Categorical(distribution).sample((n_samples,)).T
             else:
-                action = override_sampling(flow, n_samples, state)
+                action = sampler(flow, n_samples, state)
             state = state.next_state(action)
 
             flows.append(flow.gather(-1, action))

@@ -57,7 +57,16 @@ class MNISTAddState(StateBase):
             return self.l_p
         sum = 0.
         for d, p in zip(self.state[0]+self.state[1], self.probability[0]+self.probability[1]):
-            d = d.T
             sum += (p + EPS).log().gather(1, d)
         self.l_p = sum
         return sum
+
+    def next_prior(self) -> torch.Tensor:
+        assert not self.sink
+        if self.constraint is None:
+            # TODO
+            raise NotImplementedError()
+        d1, d2 = self.state
+        if len(d1) < self.N:
+            return self.probability[0][len(d1)]
+        return self.probability[1][len(d2)]
