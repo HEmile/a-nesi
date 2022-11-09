@@ -103,7 +103,8 @@ class MNISTAddState(StateBase[Tensor]):
         if self.y is None:
             if self.constraint is not None:
                 # Should return the amount of models for each query
-                return one_hot(self.constraint, self.n_classes()) * self._amount_models_y(self.constraint).unsqueeze(-1)
+                # return one_hot(self.constraint, self.n_classes()) * self._amount_models_y(self.constraint).unsqueeze(-1)
+                return torch.ones_like(self.constraint).unsqueeze(-1).expand(-1, self.n_classes())
             return self._amount_models_y(torch.arange(1, self.n_classes()).unsqueeze(0))
         if self.N == 1:
             # We'll do other cases later

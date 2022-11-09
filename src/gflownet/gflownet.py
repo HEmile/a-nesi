@@ -102,10 +102,13 @@ class GFlowNetBase(ABC, nn.Module, Generic[ST]):
             if flow_pp is not None:
                 flow = flow_pp(flow, state)
             partition = flow.sum(-1)
+            # TODO: all flows we use are normalized, I think we can drop this term.
             distribution = flow / partition.unsqueeze(-1)
 
             if state.constraint is not None and state.y is None:
                 action = state.constraint
+                # This is the conditional partition!
+                partition = flow.mean(-1)
             else:
                 # TODO: properly chose amt_samples
                 if not has_expanded:
@@ -160,11 +163,9 @@ class GFlowNetBase(ABC, nn.Module, Generic[ST]):
 
         assert result.final_state.sink and result.final_state.success is not None
 
-        forward_probs = result.forward_probabilities
-        forward_probs[0] = forward_probs[0].expand((-1, *forward_probs[1].shape[1:]))
-        log_x = torch.stack(result.forward_probabilities, -1).log().sum(-1)
+        log_x = torch.stack(result.forward_probabilities[1:], -1).log().sum(-1)
         # Why not multiply with partition Z? Because the source node has flow 1!
-        # log_x = log_x + result.partitions[0].unsqueeze(-1).log()
+        log_x = log_x + result.partitions[0].unsqueeze(-1).log()
 
         # let's for now assume it's 1... Since we use the perfect sampler.
         y = result.final_state.success.float()
