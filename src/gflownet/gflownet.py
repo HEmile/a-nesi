@@ -84,7 +84,7 @@ class GFlowNetBase(ABC, nn.Module, Generic[ST]):
             self.replay_buffer = set[List[ST]]()
         self.lossf = lossf
 
-    def forward(self, state: ST, max_steps: Optional[int] = None, amt_samples=1,
+    def forward(self, state: ST, max_steps: Optional[int] = None, amt_samples=1, has_expanded=False,
                 sampler: Optional[Sampler] = None, flow_pp: Optional[FlowPostProcessor] = None) -> GFlowNetResult[ST]:
         # sampler: If None, this samples in proportion to the flow.
         # Otherwise, this should be a function that takes the flow, the distribution, the number of samples, and the state, and returns a sample
@@ -108,7 +108,11 @@ class GFlowNetBase(ABC, nn.Module, Generic[ST]):
                 action = state.constraint
             else:
                 # TODO: properly chose amt_samples
-                n_samples = amt_samples if len(flows) == 0 else 1
+                if not has_expanded:
+                    n_samples = amt_samples
+                    has_expanded = True
+                else:
+                    n_samples = 1
                 if sampler is None:
                     action = self.regular_sampler(flow, distribution, n_samples, state)
                 else:
@@ -156,6 +160,8 @@ class GFlowNetBase(ABC, nn.Module, Generic[ST]):
 
         assert result.final_state.sink and result.final_state.success is not None
 
+        forward_probs = result.forward_probabilities
+        forward_probs[0] = forward_probs[0].expand((-1, *forward_probs[1].shape[1:]))
         log_x = torch.stack(result.forward_probabilities, -1).log().sum(-1)
         # Why not multiply with partition Z? Because the source node has flow 1!
         # log_x = log_x + result.partitions[0].unsqueeze(-1).log()
@@ -202,10 +208,12 @@ class NeSyGFlowNet(GFlowNetBase[ST]):
         steps = max_steps
         assert not state.sink and (steps is None or steps > 0)
         while not state.sink and (steps is None or steps > 0):
-            n_samples = amt_samples if len(flows) == 0 else 1
+            # TODO: This is kinda hacky. This assumes we first deterministically select a constraint, then we start
+            #  sampling worlds from there.
+            n_samples = amt_samples if len(flows) == 1 else 1
 
             # Run the weighted model counting GFlowNet. Sample proportionally, but prune impossible actions (if self.prune)
-            result = self.gfn(state, max_steps=1, amt_samples=n_samples, flow_pp=self.prune_actions if self.prune else None)
+            result = self.gfn(state, max_steps=1, amt_samples=n_samples, flow_pp=self.prune_actions if self.prune else None, has_expanded=len(flows) > 1)
 
             # Choose which action to use
             mc_prob = self.greedy_prob + self.uniform_prob

@@ -16,9 +16,11 @@ class MNISTAddState(StateBase[Tensor]):
     l_p: Optional[Tensor] = None
 
     def __init__(self, probability: torch.Tensor, N: int, constraint: Optional[Tensor], y: Optional[Tensor] = None,
-                 oh_y: Optional[Tensor] = None, state: List[Tensor] = [], oh_state: List[Tensor] = [],
+                 state: List[Tensor] = [], oh_state: List[Tensor] = [],
                  expanded_pw: Optional[Tensor] = None, sink: bool = False):
         # Assuming probability is a b x 2*N x 10 Tensor
+        # state: Contains the sampled digits
+        # oh_state: Contains the one-hot encoded digits, but _also_ the one-hot encoded value of y
         assert 2 * N >= len(state)
         self.N = N
         self.pw = probability
@@ -26,16 +28,11 @@ class MNISTAddState(StateBase[Tensor]):
 
         self.constraint = constraint
         self.y = y
-        self.oh_y = oh_y
-        if self.oh_y is None and self.y is not None:
-            self.oh_y = one_hot(y, self.n_classes()).float()
-        if len(state) == 1:
-            self.oh_y = self.oh_y.unsqueeze(1).expand(-1, state[0].shape[1], -1)
-            self.expanded_pw = self.pw.flatten(1).unsqueeze(1).expand(-1, state[0].shape[1], -1)
         self.state = state
-        if len(state) != len(oh_state):
-            raise ValueError("state and oh_state must have the same length")
         self.oh_state = oh_state
+
+        if len(oh_state) > 0 and len(state) != len(oh_state) - 1:
+            raise ValueError("state and oh_state must have the same length up to 1")
 
         super().__init__(sink)
 
@@ -43,11 +40,22 @@ class MNISTAddState(StateBase[Tensor]):
         assert not self.sink
         assert len(self.state) < 2 * self.N
 
-        state = self.state + [action]
-        oh_state = self.oh_state + [one_hot(action, 10).float()]
+        y = self.y
+        state = self.state
+        oh_state = self.oh_state
+        expanded_pw = self.expanded_pw
+        if self.y is None:
+            oh_state = oh_state + [one_hot(action, self.n_classes()).float()]
+            y = action
+        else:
+            state = state + [action]
+            oh_state = oh_state + [one_hot(action, 10).float()]
+        if len(state) == 1:
+            expanded_pw = self.pw.flatten(1).unsqueeze(1).expand(-1, state[0].shape[1], -1)
+            oh_state[0] = self.oh_state[0].unsqueeze(1).expand(-1, state[0].shape[1], -1)
 
         sink = len(state) == 2 * self.N
-        return MNISTAddState(self.pw, self.N, self.y, self.oh_y, state, oh_state, self.expanded_pw, sink)
+        return MNISTAddState(self.pw, self.N, self.constraint, y, state, oh_state, expanded_pw, sink)
 
     def compute_success(self) -> torch.Tensor:
         assert self.state is not None
@@ -95,7 +103,7 @@ class MNISTAddState(StateBase[Tensor]):
         if self.y is None:
             if self.constraint is not None:
                 # Should return the amount of models for each query
-                return one_hot(self.constraint) * self._amount_models_y(self.constraint)
+                return one_hot(self.constraint, self.n_classes()) * self._amount_models_y(self.constraint).unsqueeze(-1)
             return self._amount_models_y(torch.arange(1, self.n_classes()).unsqueeze(0))
         if self.N == 1:
             # We'll do other cases later
