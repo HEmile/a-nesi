@@ -29,7 +29,7 @@ if __name__ == '__main__':
         "hidden_size": [200],
         "uniform_prob": [0.0],
         "greedy_prob": [0.0],
-        "prune": [False],
+        "prune": [True],
         "loss": ['bce-tb', 'mse-tb'],
     }
 

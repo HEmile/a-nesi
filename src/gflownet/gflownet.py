@@ -7,8 +7,14 @@ import torch
 from torch import nn
 from torch.distributions import Categorical
 
+O = TypeVar('O')
 
-class StateBase(ABC):
+class StateBase(ABC, Generic[O]):
+    # The difference between y and the constraint: An empty state when doing learning provides the constraint, and
+    #  not y. This is to learn the mapping from the probability to y. When doing inference, we provide y
+    #  deterministically at the first step.
+    constraint: Optional[O] = None
+    y: Optional[O] = None
     # True if this state is a sink
     sink: bool = False
     # If this state is a sink, this should contain for each sample whether the constraint is satisfied
@@ -64,13 +70,18 @@ class GFlowNetResult(Generic[ST]):
     final_distribution: torch.Tensor
 
 
-
 Sampler = Callable[[torch.Tensor, torch.Tensor, int, ST], torch.Tensor]
 FlowPostProcessor = Callable[[torch.Tensor, ST], torch.Tensor]
 
+
 class GFlowNetBase(ABC, nn.Module, Generic[ST]):
-    def __init__(self, lossf='mse-tb'):
+    def __init__(self, lossf='mse-tb', experience_replay=False):
         super().__init__()
+        # Saves nonzero results. Shouldn't be used when running the Neurosymbolic GFlowNet as it is guaranteed to sample
+        #  models.
+        self.experience_replay = experience_replay
+        if experience_replay:
+            self.replay_buffer = set[List[ST]]()
         self.lossf = lossf
 
     def forward(self, state: ST, max_steps: Optional[int] = None, amt_samples=1,
@@ -93,11 +104,15 @@ class GFlowNetBase(ABC, nn.Module, Generic[ST]):
             partition = flow.sum(-1)
             distribution = flow / partition.unsqueeze(-1)
 
-            n_samples = amt_samples if len(flows) == 0 else 1
-            if sampler is None:
-                action = self.regular_sampler(flow, distribution, n_samples, state)
+            if state.constraint is not None and state.y is None:
+                action = state.constraint
             else:
-                action = sampler(flow, distribution, n_samples, state)
+                # TODO: properly chose amt_samples
+                n_samples = amt_samples if len(flows) == 0 else 1
+                if sampler is None:
+                    action = self.regular_sampler(flow, distribution, n_samples, state)
+                else:
+                    action = sampler(flow, distribution, n_samples, state)
             state = state.next_state(action)
 
             shld_unsqueeze = len(action.shape) < len(flow.shape)
@@ -142,8 +157,8 @@ class GFlowNetBase(ABC, nn.Module, Generic[ST]):
         assert result.final_state.sink and result.final_state.success is not None
 
         log_x = torch.stack(result.forward_probabilities, -1).log().sum(-1)
-        # Multiply with partition Z
-        log_x = log_x + result.partitions[0].unsqueeze(-1).log()
+        # Why not multiply with partition Z? Because the source node has flow 1!
+        # log_x = log_x + result.partitions[0].unsqueeze(-1).log()
 
         # let's for now assume it's 1... Since we use the perfect sampler.
         y = result.final_state.success.float()
@@ -156,11 +171,12 @@ class GFlowNetBase(ABC, nn.Module, Generic[ST]):
             if is_wmc:
                 # Reward function for weighted model counting weights models by their probability
                 y = y * log_y.exp()
+            if self.experience_replay:
+                pass
             return nn.BCELoss()(x, y)
         elif self.lossf == 'mse-tb':
             return (log_x - log_y).pow(2).mean()
         raise ValueError(f"Unknown loss function {self.lossf}")
-
 
 
 class NeSyGFlowNet(GFlowNetBase[ST]):

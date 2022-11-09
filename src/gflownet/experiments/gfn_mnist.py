@@ -27,22 +27,20 @@ class GFNMnistWMC(GFlowNetBase[MNISTAddState]):
 
     def flow(self, state: MNISTAddState) -> torch.Tensor:
         p = state.probability_vector().detach()
-        if state.constraint is None:
+        if state.y is None:
             z = torch.relu(self.hidden_query(p))
-            return torch.sigmoid(self.output_query(z))
+            return torch.softmax(self.output_query(z), -1)
 
         # TODO: It has to recreate the one_hot vector every time, which is not efficient
 
+        # TODO: This doesn't quite return a flow, but rather a distribution. Only in the case up here is it a flow.
         ds = state.state
-        oh_query = state.oh_query
+        oh_query = state.oh_y
         inputs = torch.cat([p, oh_query] + state.oh_state, -1)
         z = torch.relu(self.hiddens[len(ds)](inputs))
         logits = self.outputs[len(ds)](z)
         # Predict amount of models for each digit
-        normalized_flow = torch.softmax(logits[..., :-1], -1)
-        partition = torch.sigmoid(logits[..., -1]).unsqueeze(-1)
-        flow = normalized_flow * partition
-        return flow
+        return torch.softmax(logits[..., :-1], -1)
 
 
 class MNISTAddModel(nn.Module):
