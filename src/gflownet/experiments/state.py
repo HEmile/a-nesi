@@ -83,3 +83,23 @@ class MNISTAddState(StateBase):
         if self.expanded_pw is not None:
             return self.expanded_pw
         return self.pw.flatten(1)
+
+    def model_count(self) -> torch.Tensor:
+        if self.N == 1:
+            # We'll do other cases later
+
+            if self.constraint is None:
+                # Should return the amount of models for each query
+                raise NotImplementedError()
+
+            if len(self.state) == 0:
+                query = self.constraint.unsqueeze(-1)
+                rang = torch.arange(10, device=query.device).unsqueeze(0)
+                first_comp = rang <= query
+                second_comp = rang >= query - 9
+                return torch.logical_and(first_comp, second_comp).int()
+            else:
+                d2 = self.constraint.unsqueeze(-1) - self.state[0]
+                # TODO: This assumes for every d1 there is a solution (ie 0 <= constraint - d1 <= 9)
+                return torch.nn.functional.one_hot(d2, 10).int()
+        raise NotImplementedError()
