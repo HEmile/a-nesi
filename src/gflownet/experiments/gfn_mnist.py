@@ -14,18 +14,21 @@ EPS = 1E-6
 
 class GFNMnistWMC(GFlowNetBase[MNISTAddState]):
 
-    def __init__(self, N: int, hidden_size: int = 200, loss_f='bce-tb'):
+    def __init__(self, N: int, hidden_size: int = 200, loss_f='mse-tb'):
         super().__init__(loss_f)
-        self.n_classes = 2 * 10 ** N - 1
         self.N = N
 
-        self.hidden_query = nn.Linear(20 * N, hidden_size)
-        self.output_query = nn.Linear(hidden_size, self.n_classes)
+        hidden_queries = [nn.Linear(20 * N + (1 + (i - 1) * 10 if i >= 1 else 0), hidden_size) for i in range(N+1)]
+        output_queries = [nn.Linear(hidden_size, 1)] + [nn.Linear(hidden_size, 10) for _ in range(N)]
 
-        self.hiddens = nn.ModuleList([nn.Linear(20 * N + self.n_classes + i * 10, hidden_size) for i in range(2 * N)])
-        self.outputs = nn.ModuleList([nn.Linear(hidden_size, 10) for _ in range(2 * N)])
+        y_size = 1 + N * 10
 
-    def flow(self, state: MNISTAddState) -> torch.Tensor:
+        self.hiddens = nn.ModuleList(hidden_queries +
+                                     [nn.Linear(20 * N + y_size + i * 10, hidden_size) for i in range(2 * N)])
+        self.outputs = nn.ModuleList(output_queries +
+                                     [nn.Linear(hidden_size, 10) for _ in range(2 * N)])
+
+    def distribution(self, state: MNISTAddState) -> torch.Tensor:
         p = state.probability_vector().detach()
         if state.y is None:
             z = torch.relu(self.hidden_query(p))
@@ -34,10 +37,13 @@ class GFNMnistWMC(GFlowNetBase[MNISTAddState]):
         # TODO: It has to recreate the one_hot vector every time, which is not efficient
 
         # TODO: This doesn't quite return a flow, but rather a distribution. Only in the case up here is it a flow.
-        ds = state.state
+        layer_index = len(state.oh_state)
         inputs = torch.cat([p] + state.oh_state, -1)
-        z = torch.relu(self.hiddens[len(ds)](inputs))
-        return torch.softmax(self.outputs[len(ds)](z), -1)
+        z = torch.relu(self.hiddens[layer_index](inputs))
+        logits = self.outputs[layer_index](z)
+        if len(state.w) > 0:
+            return torch.softmax(logits, -1)
+        return torch.sigmoid(logits)
 
 
 class MNISTAddModel(nn.Module):
@@ -70,7 +76,7 @@ class MNISTAddModel(nn.Module):
 
         # note: final_state is equal in both results
         state = result.final_state
-        log_p = state.log_prob()
+        log_p = state.log_p_world()
 
         success = state.success
 
@@ -81,7 +87,7 @@ class MNISTAddModel(nn.Module):
         log_reward[mask] = (success[mask, :] * log_p[mask, :] / total_successes[mask].unsqueeze(-1))
         log_reward = log_reward.sum(-1)
 
-        p_constraint = result.partitions[0]
+        p_constraint = torch.stack(result.forward_probabilities[:N+1], -1).prod(-1)
 
         uncond_samples = Categorical(p).sample((100,))
         succes_p = (uncond_samples[..., 0] + uncond_samples[..., 1] == query).float().mean(0)
