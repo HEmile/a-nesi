@@ -17,14 +17,14 @@ class StateBase(ABC, Generic[O]):
     constraint: Optional[List[O]] = None
     y: Optional[List[O]] = None
     # True if this state is a sink
-    sink: bool = False
+    final: bool = False
     # If this state is a sink, this should contain for each sample whether the constraint is satisfied
     success: Optional[torch.Tensor] = None
 
-    def __init__(self, sink: bool = False):
+    def __init__(self, final: bool = False):
         super().__init__()
-        self.sink = sink
-        if self.sink:
+        self.final = final
+        if self.final:
             self.success = self.compute_success()
 
     @abstractmethod
@@ -81,19 +81,18 @@ class NRMBase(ABC, nn.Module, Generic[ST]):
         # Sample (hopefully) positive worlds to estimate gradients
         forward_probabilities = []
         steps = max_steps
-        assert not state.sink and (steps is None or steps > 0)
+        assert not state.final and (steps is None or steps > 0)
 
         if not sampler:
             sampler = self.regular_sampler
 
         # The main GFlowNet loop to sample trajectories
-        while not state.sink and (steps is None or steps > 0):
+        while not state.final and (steps is None or steps > 0):
             distribution = self.distribution(state)
             is_binary = distribution.shape[-1] == 1
             if is_binary:
                 distribution = torch.cat([distribution, 1 - distribution], dim=-1)
             if self.prune:
-                # TODO: This won't work for binary RVs
                 mask = state.symbolic_pruner().float()
                 distribution = distribution * mask
                 distribution = distribution / distribution.sum(-1, keepdim=True)
@@ -150,7 +149,7 @@ class NRMBase(ABC, nn.Module, Generic[ST]):
         # if is_wmc: Weights output rewards by the probability of the sample.
         # If not is_wmc: Rewards are just whether the constraint is satisfied. Used for model counting.
 
-        assert result.final_state.sink and result.final_state.success is not None
+        assert result.final_state.final and result.final_state.success is not None
 
         log_q = torch.stack(result.forward_probabilities, -1).log().sum(-1)
         # # Why not multiply with partition Z? Because the source node has flow 1!
@@ -195,8 +194,8 @@ class GreedyNRM(NRMBase[ST]):
         if sampler is not None:
             print("WARNING: Sampler is ignored in NeSyGFlowNet")
         steps = max_steps
-        assert not state.sink and (steps is None or steps > 0)
-        while not state.sink and (steps is None or steps > 0):
+        assert not state.final and (steps is None or steps > 0)
+        while not state.final and (steps is None or steps > 0):
             # TODO: This is kinda hacky. This assumes we first deterministically select a constraint, then we start
             #  sampling worlds from there.
             # Run the weighted model counting GFlowNet. Sample proportionally, but prune impossible actions (if self.prune)

@@ -17,7 +17,7 @@ class MNISTAddState(StateBase[Tensor]):
 
     def __init__(self, probability: torch.Tensor, N: int, constraint: Union[Optional[Tensor], List[Tensor]],
                  y: List[Tensor] = [], w: List[Tensor] = [], oh_state: List[Tensor] = [],
-                 expanded_pw: Optional[Tensor] = None, sink: bool = False):
+                 expanded_pw: Optional[Tensor] = None, final: bool = False):
         # Assuming probability is a b x 2*N x 10 Tensor
         # state: Contains the sampled digits
         # oh_state: Contains the one-hot encoded digits, but _also_ the one-hot encoded value of y
@@ -40,10 +40,10 @@ class MNISTAddState(StateBase[Tensor]):
         if len(w) + len(y) != len(oh_state):
             raise ValueError("oh_state must have the same length as the w and y lists")
 
-        super().__init__(sink)
+        super().__init__(final)
 
     def next_state(self, action: torch.Tensor) -> MNISTAddState:
-        assert not self.sink
+        assert not self.final
         assert len(self.w) < 2 * self.N
 
         y = self.y
@@ -67,8 +67,9 @@ class MNISTAddState(StateBase[Tensor]):
             expanded_pw = self.pw.flatten(1).unsqueeze(1).expand(-1, w[0].shape[1], -1)
             oh_state[:-1] = map(lambda s: s.unsqueeze(1).expand(-1, w[0].shape[1], -1), oh_state[:-1])
 
-        sink = len(w) == 2 * self.N
-        return MNISTAddState(self.pw, self.N, self.constraint, y, w, oh_state, expanded_pw, sink)
+        final = (len(w) == 2 * self.N)
+
+        return MNISTAddState(self.pw, self.N, self.constraint, y, w, oh_state, expanded_pw, final)
 
     def compute_success(self) -> torch.Tensor:
         assert self.w is not None
@@ -91,9 +92,6 @@ class MNISTAddState(StateBase[Tensor]):
         stacky = torch.stack([10 ** (self.N - i) * self.y[i] for i in range(self.N + 1)], -1)
         return stacky.sum(-1)
 
-    def n_classes(self) -> int:
-        return 2 * (10 ** self.N) - self.N
-
     def log_p_world(self) -> torch.Tensor:
         if self.l_p is not None:
             # Cached log prob
@@ -105,7 +103,7 @@ class MNISTAddState(StateBase[Tensor]):
         return sum
 
     def next_prior(self) -> torch.Tensor:
-        assert not self.sink
+        assert not self.final
         if self.y is None:
             if self.constraint is not None:
                 return one_hot(self.constraint)

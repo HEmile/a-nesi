@@ -11,7 +11,7 @@ from ppe.experiments.state import MNISTAddState
 EPS = 1E-6
 
 
-class GFNMnistWMC(NRMBase[MNISTAddState]):
+class NRMMnist(NRMBase[MNISTAddState]):
 
     def __init__(self, N: int, hidden_size: int = 200, loss_f='mse-tb'):
         super().__init__(loss_f)
@@ -29,18 +29,12 @@ class GFNMnistWMC(NRMBase[MNISTAddState]):
 
     def distribution(self, state: MNISTAddState) -> torch.Tensor:
         p = state.probability_vector().detach()
-        if state.y is None:
-            z = torch.relu(self.hidden_query(p))
-            return torch.softmax(self.output_query(z), -1)
-
-        # TODO: It has to recreate the one_hot vector every time, which is not efficient
-
-        # TODO: This doesn't quite return a flow, but rather a distribution. Only in the case up here is it a flow.
         layer_index = len(state.oh_state)
         inputs = torch.cat([p] + state.oh_state, -1)
+
         z = torch.relu(self.hiddens[layer_index](inputs))
         logits = self.outputs[layer_index](z)
-        if len(state.w) > 0:
+        if len(state.oh_state) > 0:
             return torch.softmax(logits, -1)
         return torch.sigmoid(logits)
 
@@ -54,7 +48,7 @@ class MNISTAddModel(nn.Module):
         self.perception_network = MNIST_Net()
         hidden_size = args["hidden_size"]
 
-        self.gfn = GFNMnistWMC(self.N, hidden_size, loss_f=args["loss"])
+        self.nrm = NRMMnist(self.N, hidden_size, loss_f=args["loss"])
 
     # Computes loss for a single batch
     def forward(self, MNISTd1: List[torch.Tensor], MNISTd2: List[torch.Tensor], query: torch.Tensor, args) -> \
@@ -68,7 +62,7 @@ class MNISTAddModel(nn.Module):
         p = self.perception_network(MNIST_in).reshape(-1, 2 * N, 10)
         initial_state = MNISTAddState(p, N, query)
 
-        result = self.gfn.forward(initial_state, amt_samples=args['amt_samples'])
+        result = self.nrm.forward(initial_state, amt_samples=args['amt_samples'])
 
         # note: final_state is equal in both results
         state = result.final_state
@@ -90,5 +84,5 @@ class MNISTAddModel(nn.Module):
 
         # Use success probabilities as importance weights for the samples
         loss_p = -(p_constraint * log_reward).mean()
-        loss_gfn = self.gfn.loss(result)
-        return loss_p, loss_gfn, p_constraint, succes_p.mean()
+        loss_nrm = self.nrm.loss(result)
+        return loss_p, loss_nrm, p_constraint, succes_p.mean()
