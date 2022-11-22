@@ -5,14 +5,13 @@ from torch import nn
 from torch.distributions import Categorical
 
 from deepproblog.examples.MNIST.network import MNIST_Net
-from gflownet import GFlowNetBase
-from gflownet.experiments.state import MNISTAddState
-from gflownet.gflownet import NeSyGFlowNet
+from ppe import NRMBase
+from ppe.experiments.state import MNISTAddState
 
 EPS = 1E-6
 
 
-class GFNMnistWMC(GFlowNetBase[MNISTAddState]):
+class GFNMnistWMC(NRMBase[MNISTAddState]):
 
     def __init__(self, N: int, hidden_size: int = 200, loss_f='mse-tb'):
         super().__init__(loss_f)
@@ -55,10 +54,7 @@ class MNISTAddModel(nn.Module):
         self.perception_network = MNIST_Net()
         hidden_size = args["hidden_size"]
 
-        gfn = GFNMnistWMC(self.N, hidden_size, loss_f=args["loss"])
-        # The Neurosymbolic GFlowNet that will perform the inference
-        self.gfn: NeSyGFlowNet[MNISTAddState] = NeSyGFlowNet(gfn, prune=args["prune"], greedy_prob=args["greedy_prob"],
-                                                             uniform_prob=args["uniform_prob"], loss_f=args["loss"])
+        self.gfn = GFNMnistWMC(self.N, hidden_size, loss_f=args["loss"])
 
     # Computes loss for a single batch
     def forward(self, MNISTd1: List[torch.Tensor], MNISTd2: List[torch.Tensor], query: torch.Tensor, args) -> \

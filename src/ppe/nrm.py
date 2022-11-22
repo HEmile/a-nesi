@@ -46,22 +46,16 @@ class StateBase(ABC, Generic[O]):
         pass
 
     @abstractmethod
-    def model_count(self) -> torch.Tensor:
-        # Uses symbolic reasoning on the current state to compute for each action how many models there are
-        pass
-
-    def viable_actions(self) -> torch.Tensor:
+    def symbolic_pruner(self) -> torch.Tensor:
         # Uses symbolic reasoning on the current state to figure out which actions are viable. Returns a mask
-        # By default, this counts the amount of models and sees if there are any.
-        # Can be overriden if model_count is not implemented
-        return self.model_count() > 0
+        pass
 
 
 ST = TypeVar("ST", bound=StateBase)
 
 
 @dataclass
-class GFlowNetResult(Generic[ST]):
+class NRMResult(Generic[ST]):
     final_state: ST
     forward_probabilities: List[torch.Tensor]
     final_action: torch.Tensor
@@ -69,21 +63,18 @@ class GFlowNetResult(Generic[ST]):
 
 
 Sampler = Callable[[torch.Tensor, int, ST], torch.Tensor]
-FlowPostProcessor = Callable[[torch.Tensor, ST], torch.Tensor]
 
 
-class GFlowNetBase(ABC, nn.Module, Generic[ST]):
-    def __init__(self, lossf='mse-tb', experience_replay=False):
+class NRMBase(ABC, nn.Module, Generic[ST]):
+    def __init__(self, lossf='mse-tb', prune=True):
         super().__init__()
         # Saves nonzero results. Shouldn't be used when running the Neurosymbolic GFlowNet as it is guaranteed to sample
         #  models.
-        self.experience_replay = experience_replay
-        if experience_replay:
-            self.replay_buffer = set[List[ST]]()
         self.lossf = lossf
+        self.prune = prune
 
     def forward(self, state: ST, max_steps: Optional[int] = None, amt_samples=1,
-                sampler: Optional[Sampler] = None, flow_pp: Optional[FlowPostProcessor] = None) -> GFlowNetResult[ST]:
+                sampler: Optional[Sampler] = None) -> NRMResult[ST]:
         # sampler: If None, this samples in proportion to the flow.
         # Otherwise, this should be a function that takes the flow, the distribution, the number of samples, and the state, and returns a sample
 
@@ -99,9 +90,12 @@ class GFlowNetBase(ABC, nn.Module, Generic[ST]):
         while not state.sink and (steps is None or steps > 0):
             distribution = self.distribution(state)
             is_binary = distribution.shape[-1] == 1
-            if flow_pp is not None:
+            if is_binary:
+                distribution = torch.cat([distribution, 1 - distribution], dim=-1)
+            if self.prune:
                 # TODO: This won't work for binary RVs
-                distribution = flow_pp(distribution, state)
+                mask = state.symbolic_pruner().float()
+                distribution = distribution * mask
                 distribution = distribution / distribution.sum(-1, keepdim=True)
 
             # TODO: We will also need constraints for w
@@ -123,10 +117,7 @@ class GFlowNetBase(ABC, nn.Module, Generic[ST]):
             if shld_unsqueeze:
                 action = action.unsqueeze(-1)
 
-            if is_binary:
-                s_dist = distribution * action + (1-distribution) * (1-action)
-            else:
-                s_dist = distribution.gather(-1, action)
+            s_dist = distribution.gather(-1, action)
 
             if shld_unsqueeze:
                 action = action.squeeze(-1)
@@ -136,7 +127,7 @@ class GFlowNetBase(ABC, nn.Module, Generic[ST]):
             if steps:
                 steps -= 1
         final_state = state
-        return GFlowNetResult(final_state, forward_probabilities, action, s_dist)
+        return NRMResult(final_state, forward_probabilities, action, s_dist)
 
     def regular_sampler(self, distribution: torch.Tensor, amt_samples: int,
                         state: ST) -> torch.Tensor:
@@ -150,7 +141,7 @@ class GFlowNetBase(ABC, nn.Module, Generic[ST]):
     def distribution(self, state: ST) -> torch.Tensor:
         pass
 
-    def loss(self, result: GFlowNetResult[ST], is_wmc=True) -> torch.Tensor:
+    def loss(self, result: NRMResult[ST], is_wmc=True) -> torch.Tensor:
         # Implements a modified version of trajectory balance
         # See https://arxiv.org/abs/2201.13259
         # TODO: I should think about how to make this numerically stable...
@@ -186,20 +177,19 @@ class GFlowNetBase(ABC, nn.Module, Generic[ST]):
         raise ValueError(f"Unknown loss function {self.lossf}")
 
 
-class NeSyGFlowNet(GFlowNetBase[ST]):
+class GreedyNRM(NRMBase[ST]):
 
-    def __init__(self, gfn: GFlowNetBase[ST], prune=True, greedy_prob: float = 0.2,
+    def __init__(self, gfn: NRMBase[ST], prune=True, greedy_prob: float = 0.0,
                  uniform_prob: float = 0.0, loss_f='mse-tb'):
         # mc_gfn: Model counting GFlowNet. Might include background knowledge
         # wmc_gfn: Weighted model counting GFlowNet
-        super().__init__(loss_f)
+        super().__init__(loss_f, prune=prune)
         self.gfn = gfn
         self.greedy_prob = greedy_prob
         self.uniform_prob = uniform_prob
-        self.prune = prune
 
     def forward(self, state: ST, max_steps: Optional[int] = None, amt_samples=1,
-                sampler: Optional[Sampler] = None, flow_pp: Optional[FlowPostProcessor] = None) -> GFlowNetResult[ST]:
+                sampler: Optional[Sampler] = None) -> NRMResult[ST]:
         probs = []
 
         if sampler is not None:
@@ -210,8 +200,7 @@ class NeSyGFlowNet(GFlowNetBase[ST]):
             # TODO: This is kinda hacky. This assumes we first deterministically select a constraint, then we start
             #  sampling worlds from there.
             # Run the weighted model counting GFlowNet. Sample proportionally, but prune impossible actions (if self.prune)
-            result = self.gfn(state, max_steps=1, amt_samples=amt_samples,
-                              flow_pp=self.prune_actions if self.prune else None)
+            result = self.gfn(state, max_steps=1, amt_samples=amt_samples)
 
             # Choose which action to use
             mc_prob = self.greedy_prob + self.uniform_prob
@@ -246,11 +235,7 @@ class NeSyGFlowNet(GFlowNetBase[ST]):
             if steps:
                 steps -= 1
 
-        return GFlowNetResult(state, probs, action, result.final_distribution)
-
-    def prune_actions(self, flow: torch.Tensor, state: ST) -> torch.Tensor:
-        # Adjusts the flow such that actions for which there are no models are never sampled
-        return flow * state.viable_actions().float()
+        return NRMResult(state, probs, action, result.final_distribution)
 
     def greedy_sampler(self, amount_models: torch.Tensor, amt_samples: int, state: ST) -> torch.Tensor:
         prior = state.next_prior()
@@ -289,10 +274,7 @@ class NeSyGFlowNet(GFlowNetBase[ST]):
         return greedy_samples
 
     def distribution(self, state: ST) -> torch.Tensor:
-        dist = self.gfn.distribution(state)
-        if self.prune:
-            return self.prune_actions(dist, state)
-        return dist
+        return self.gfn.distribution(state)
 
-    def loss(self, result: GFlowNetResult[ST], is_wmc=True) -> torch.Tensor:
+    def loss(self, result: NRMResult[ST], is_wmc=True) -> torch.Tensor:
         return self.gfn.loss(result, is_wmc=True)

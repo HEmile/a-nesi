@@ -5,7 +5,7 @@ import torch
 from torch import Tensor
 from torch.nn.functional import one_hot
 
-from gflownet.gflownet import StateBase
+from ppe.nrm import StateBase
 
 StateRep = List[Tensor]
 
@@ -121,6 +121,9 @@ class MNISTAddState(StateBase[Tensor]):
     def _amount_models_y(self, y: torch.Tensor) -> torch.Tensor:
         return 10 ** self.N - torch.abs(y - (10 ** self.N - 1))
 
+    def symbolic_pruner(self) -> torch.Tensor:
+        return self.model_count() > 0
+
     def model_count(self) -> torch.Tensor:
         if len(self.y) < self.N + 1:
             # if self.constraint is not None:
@@ -129,8 +132,12 @@ class MNISTAddState(StateBase[Tensor]):
             #     return torch.ones_like(self.constraint).unsqueeze(-1).expand(-1, self.n_classes())
             # TODO: This isn't an actual model count but I couldn't be bothered lol
             if len(self.y) == 0:
-                return torch.ones((2,)).unsqueeze(-1)
-            return torch.ones((10,)).unsqueeze(-1)
+                return torch.ones((2,)).unsqueeze(0)
+            onez = torch.ones((10,)).unsqueeze(0)
+            if len(self.y) == self.N:
+                onez[:, -1] = 0
+                return onez
+            return onez
             # return self._amount_models_y(torch.arange(1, self.n_classes()).unsqueeze(0))
         if self.N == 1:
             # We'll do other cases later

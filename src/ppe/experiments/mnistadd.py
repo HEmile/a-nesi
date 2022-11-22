@@ -3,11 +3,11 @@ import torch
 import wandb
 from torch.utils.data import DataLoader
 
-from gflownet.experiments.data import (
+from ppe.experiments.data import (
     addition,
 )
 from deepproblog.utils import get_configuration, format_time_precise, config_to_string
-from gflownet.experiments.gfn_mnist import MNISTAddModel
+from ppe.experiments.gfn_mnist import MNISTAddModel
 
 LOG_ITER = 100
 
