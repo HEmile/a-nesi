@@ -3,15 +3,22 @@
 [TODO: Description of NRM ]. For more information, consult the papers listed below.
 
 
-## Requirements
+## Getting started
+
+### Requirements
 
 Neurosymbolic Reverse Model has the following requirements:
 
 * Python - v3.9.15
 * [PyTorch](https://pytorch.org/) - v1.12.1
 * [TorchVision](https://pytorch.org/vision/stable/index.html) - v0.13.1
-* Weights&Biases - 0.13.2
-* 
+* [Weights&Biases](https://wandb.ai/) - 0.13.2
+
+Run the following:
+
+1. Install the dependencies inside a new virtual environment: `bash setup_dependencies.sh`
+
+2. Activate the virtual environment: `conda activate NRM`
 
 ## Experiments
 
