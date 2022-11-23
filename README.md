@@ -1,33 +1,28 @@
-# DeepProbLog
-[![Unit tests](https://github.com/ML-KULeuven/deepproblog/actions/workflows/python-app.yml/badge.svg)](https://github.com/ML-KULeuven/deepproblog/actions/workflows/python-app.yml)
+# Neurosymbolic Reverse Model 
 
-DeepProbLog is an extension of [ProbLog](https://dtai.cs.kuleuven.be/problog/)
-that integrates Probabilistic Logic Programming with deep learning by introducing the neural predicate. 
-The neural predicate represents probabilistic facts whose probabilites are parameterized by neural networks.
-For more information, consult the papers listed below.
+[TODO: Description of NRM ]. For more information, consult the papers listed below.
 
 
 ## Requirements
 
-DeepProbLog has the following requirements:
+Neurosymbolic Reverse Model has the following requirements:
 
-* [ProbLog](https://dtai.cs.kuleuven.be/problog/)
-* [PySDD](https://pysdd.readthedocs.io/en/latest/)
-* [PyTorch](https://pytorch.org/)
-* [TorchVision](https://pytorch.org/vision/stable/index.html)
-* [PySwip](https://github.com/ML-KULeuven/pyswip) (our fork)
+* Python - v3.9.15
+* [PyTorch](https://pytorch.org/) - v1.12.1
+* [TorchVision](https://pytorch.org/vision/stable/index.html) - v0.13.1
+* Weights&Biases - 0.13.2
+* 
 
 ## Experiments
 
 The experiments are presented in the papers are available in the [src/deepproblog/examples](src/deepproblog/examples) directory.
 
+
+
+
 ## Papers
-1. Robin Manhaeve, Sebastijan Dumancic, Angelika Kimmig, Thomas Demeester, Luc De Raedt:
-*DeepProbLog: Neural Probabilistic Logic Programming*. NeurIPS 2018: 3753-3763 ([paper](https://papers.nips.cc/paper/2018/hash/dc5d637ed5e62c36ecb73b654b05ba2a-Abstract.html))
-2. Robin Manhaeve, Sebastijan Dumancic, Angelika Kimmig, Thomas Demeester, Luc De Raedt:
-*Neural Probabilistic Logic Programming in DeepProbLog*. AIJ ([paper](https://www.sciencedirect.com/science/article/abs/pii/S0004370221000552))
-3. Robin Manhaeve, Giuseppe Marra, Luc De Raedt:
-*Approximate Inference for Neural Probabilistic Logic Programming*. KR 2021
+1. TBC
+
 ## License
 Copyright 2021 KU Leuven, DTAI Research Group
 
