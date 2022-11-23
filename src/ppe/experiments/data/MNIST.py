@@ -149,48 +149,6 @@ class MNISTOperator(TorchDataset):
         data = [(self.data[i], self._get_label(i)) for i in range(len(self))]
         return json.dumps(data)
 
-    def to_query(self, i: int) -> Query:
-        """Generate queries"""
-        mnist_indices = self.data[i]
-        expected_result = self._get_label(i)
-
-        # Build substitution dictionary for the arguments
-        subs = dict()
-        var_names = []
-        for i in range(self.arity):
-            inner_vars = []
-            for j in range(self.size):
-                t = Term(f"p{i}_{j}")
-                subs[t] = Term(
-                    "tensor",
-                    Term(
-                        self.dataset_name,
-                        Constant(mnist_indices[i][j]),
-                    ),
-                )
-                inner_vars.append(t)
-            var_names.append(inner_vars)
-
-        # Build query
-        if self.size == 1:
-            return Query(
-                Term(
-                    self.function_name,
-                    *(e[0] for e in var_names),
-                    Constant(expected_result),
-                ),
-                subs,
-            )
-        else:
-            return Query(
-                Term(
-                    self.function_name,
-                    *(list2term(e) for e in var_names),
-                    Constant(expected_result),
-                ),
-                subs,
-            )
-
     def _get_label(self, i: int):
         mnist_indices = self.data[i]
         # Figure out what the ground truth is, first map each parameter to the value:
