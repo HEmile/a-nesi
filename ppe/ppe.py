@@ -10,7 +10,7 @@ from torch.distributions import Categorical
 class PPEBase(ABC, Generic[ST]):
 
     def __init__(self, nrm: NRMBase[ST], perception: nn.Module, amount_samples: int, belief_size:List[int],
-                 initial_concentration: float = 0.1, K_beliefs: int = 100):
+                 initial_concentration: float = 500, dirichlet_iters: int = 50, dirichlet_lr: float = 1.0, K_beliefs: int = 100):
         """
         :param nrm: The neurosymbolic reverse model
         :param perception: The perception network. Should accept samples from data
@@ -23,13 +23,16 @@ class PPEBase(ABC, Generic[ST]):
         self.amount_samples = amount_samples
         self.belief_size = belief_size
         self.K_beliefs = K_beliefs
+        self.dirichlet_iters = dirichlet_iters
+        self.dirichlet_lr = dirichlet_lr
 
         # We're training these two models separately, so let's also use two different optimizers.
         #  This ensures we won't accidentally update the wrong model.
         self.nrm_optimizer = torch.optim.Adam(self.nrm.parameters())
         self.perception_optimizer = torch.optim.Adam(self.perception.parameters())
 
-        self.alpha = torch.ones((1, len(belief_size), max(belief_size))) * initial_concentration
+        self.alpha = torch.ones((len(belief_size), max(belief_size))) * initial_concentration
+        self.alpha.requires_grad = True
         self.beliefs = None
 
     def sample(self, x: torch.Tensor) -> ST:
@@ -50,8 +53,9 @@ class PPEBase(ABC, Generic[ST]):
         Algorithm 2
         For now assumes all w_i are the same size
         """
-        p_P = fit_dirichlet(beliefs, self.alpha)
+        p_P = fit_dirichlet(beliefs, self.alpha, self.dirichlet_lr, self.dirichlet_iters)
         P = p_P.sample((self.amount_samples,))
+        print(P)
         p_w = Categorical(probs=P)
         w = p_w.sample()
 
@@ -83,6 +87,7 @@ class PPEBase(ABC, Generic[ST]):
         nrm_loss = self.nrm_loss(self.beliefs)
 
         # TODO: We gotta be sure this only changes the NRM parameters
+        # TODO: Figure out how to retain the graph. Maybe it's not needed since P is not involved.
         nrm_loss.backward()
 
         self.nrm_optimizer.step()

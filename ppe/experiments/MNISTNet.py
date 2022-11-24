@@ -34,10 +34,18 @@ class MNIST_Net(nn.Module):
         )
 
     def forward(self, x):
+        """
+        Assuming x is of shape [b, ds, 28, 28] where ds is the number of digits
+        """
+
+        batch_size = x.shape[0]
+        # transform x into [b*ds, 1, 28, 28]
+        x = x.reshape(-1, 1, 28, 28)
         # x = x.unsqueeze(0)
         x = self.encoder(x)
         x = x.view(-1, self.size)
         x = self.classifier(x)
         if self.with_softmax:
             x = self.softmax(x)
+        x = x.reshape(batch_size, -1, 10)
         return x

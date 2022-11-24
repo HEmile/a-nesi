@@ -28,6 +28,9 @@ if __name__ == '__main__':
         "greedy_prob": 0.0,
         "prune": False,
         "loss": 'mse-tb',
+        "dirichlet_init": 500,
+        "dirichlet_lr": 1,
+        "dirichlet_iters": 50
     }
 
     # TODO: Move hyperparameter sweep to wandb sweep
@@ -62,7 +65,7 @@ if __name__ == '__main__':
         for i, batch in enumerate(loader):
             numb1, numb2, label = batch
 
-            x = torch.stack([numb1 + numb2], dim=1)
+            x = torch.cat([numb1, numb2], dim=1)
             loss_nrm, loss_percept = model.train(x, label)
 
             cum_loss_percept += loss_percept.item()

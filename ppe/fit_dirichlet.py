@@ -39,24 +39,26 @@ from torch.distributions import Dirichlet
 #     print(Dirichlet(a).sample())
 
 
-def fit_dirichlet(beliefs: torch.Tensor, alpha: torch.Tensor) -> Dirichlet:
+def fit_dirichlet(beliefs: torch.Tensor, alpha: torch.Tensor, lr=1, iters=1000) -> Dirichlet:
     a = alpha
     data = beliefs
     N = data.shape[0]
-    optimizer = torch.optim.Adam([a], lr=0.1)
-    statistics = data.log().mean(0)
-    for i in range(100):
+    optimizer = torch.optim.Adam([a], lr=lr)
+    statistics = data.log().mean(0).detach()
+    for i in range(iters):
         # Dirichlet log likelihood. See https://tminka.github.io/papers/dirichlet/minka-dirichlet.pdf
         # statistics = data.log().mean(0)
         # NOTE: The hardcoded version is quicker since the sufficient statistics are fixed.
         # NOTE: We have to think about how to parallelize this. Should be trivial (especially if the dimensions of each dirichlet is fixed)
-        log_p = N * torch.lgamma(a.sum()) - \
-                N * torch.lgamma(a).sum() + \
-                N * torch.sum((a - 1) * statistics)
+        log_p = torch.lgamma(a.sum(-1)) - \
+                torch.lgamma(a).sum(-1) + \
+                torch.sum((a - 1) * statistics, -1)
+        log_p = log_p * N
         optimizer.zero_grad()
 
-        loss = -log_p
+        loss = -log_p.mean()
+        print(loss, a)
 
-        loss.backward()
+        loss.backward(retain_graph=True)
         optimizer.step()
     return Dirichlet(alpha)

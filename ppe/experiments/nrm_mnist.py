@@ -47,7 +47,8 @@ class MNISTAddModel(PPEBase[MNISTAddState]):
         hidden_size = args["hidden_size"]
 
         nrm = NRMMnist(self.N, hidden_size, loss_f=args["loss"])
-        super().__init__(nrm, MNIST_Net(), args['amt_samples'], belief_size=[10] * 2 * self.N)
+        super().__init__(nrm, MNIST_Net(), args['amt_samples'], belief_size=[10] * 2 * self.N,
+                         dirichlet_lr=args['dirichlet_lr'], dirichlet_iters=args['dirichlet_iters'],)
 
 
     def initial_state(self, P: torch.Tensor, y: Optional[torch.Tensor] = None, w: Optional[torch.Tensor] = None,
