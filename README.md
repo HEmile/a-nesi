@@ -2,17 +2,14 @@
 
 [TODO: Description of NRM ]. For more information, consult the papers listed below.
 
-
-## Getting started
-
-### Requirements
+## Requirements
 
 Neurosymbolic Reverse Model has the following requirements:
 
-* Python - v3.9.15
+* [Python](https://www.python.org/) - v3.9.15
 * [PyTorch](https://pytorch.org/) - v1.12.1
 * [TorchVision](https://pytorch.org/vision/stable/index.html) - v0.13.1
-* [Weights&Biases](https://wandb.ai/) - 0.13.2
+* [Weights&Biases](https://wandb.ai/) - v0.13.2
 
 Run the following:
 
@@ -23,9 +20,6 @@ Run the following:
 ## Experiments
 
 The experiments are presented in the papers are available in the [src/deepproblog/examples](src/deepproblog/examples) directory.
-
-
-
 
 ## Papers
 1. TBC
