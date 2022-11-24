@@ -55,15 +55,16 @@ class MNISTAddState(StateBase):
             w = w + [action]
             oh_state = oh_state + [one_hot(action, 10).float()]
 
-        # If we sample multiple samples, then if we deterministically choose using the constraint, it is missing
-        #  the sample dimension. This expands those tensors to include the sample dimension for future computation.
-        if len(oh_state) == len(self.constraint) + 1:
-            expanded_pw = self.pw.flatten(1).unsqueeze(1).expand(-1, w[0].shape[1], -1)
-            oh_state[:-1] = map(lambda s: s.unsqueeze(1).expand(-1, w[0].shape[1], -1), oh_state[:-1])
+        # # If we sample multiple samples, then if we deterministically choose using the constraint, it is missing
+        # #  the sample dimension. This expands those tensors to include the sample dimension for future computation.
+        # if len(oh_state) == len(self.constraint) + 1:
+        #     expanded_pw = self.pw.flatten(1).unsqueeze(1).expand(-1, w[0].shape[1], -1)
+        #     oh_state[:-1] = map(lambda s: s.unsqueeze(1).expand(-1, w[0].shape[1], -1), oh_state[:-1])
 
         final = (len(w) == 2 * self.N)
 
-        return MNISTAddState(self.pw, self.N, self.constraint, y, w, oh_state, expanded_pw, final)
+        return MNISTAddState(self.pw, self.N, self.constraint, y, w, oh_state, expanded_pw, generate_w=self.generate_w,
+                             final=final)
 
     def compute_success(self) -> torch.Tensor:
         assert self.w is not None
@@ -122,17 +123,19 @@ class MNISTAddState(StateBase):
             # TODO: This isn't an actual model count but I couldn't be bothered lol
             if len(self.y) == 0:
                 return torch.ones((2,)).unsqueeze(0)
-            onez = torch.ones((10,)).unsqueeze(0)
+            onez = torch.ones((10,))
             if len(self.y) == self.N:
-                onez[:, -1] = 0
-                return onez
+                onez_without_nine = torch.ones_like(onez)
+                onez_without_nine[-1] = 0
+                return (torch.outer(self.y[0], onez_without_nine) + torch.outer(1 - self.y[0], onez))
             return onez
             # return self._amount_models_y(torch.arange(1, self.n_classes()).unsqueeze(0))
         if self.N == 1:
             # We'll do other cases later
-            ny = self.query_to_number().unsqueeze(-1)
+            ny = self.query_to_number()
             if len(self.w) == 0:
                 rang = torch.arange(10, device=ny.device).unsqueeze(0)
+                ny = ny.unsqueeze(-1)
                 first_comp = rang <= ny
                 second_comp = rang >= ny - 9
                 return torch.logical_and(first_comp, second_comp).int()

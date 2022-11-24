@@ -55,16 +55,19 @@ class PPEBase(ABC, Generic[ST]):
         """
         p_P = fit_dirichlet(beliefs, self.alpha, self.dirichlet_lr, self.dirichlet_iters)
         P = p_P.sample((self.amount_samples,))
-        print(P)
         p_w = Categorical(probs=P)
+        # (batch, |W|)
         w = p_w.sample()
 
+        # (batch,)
         y = self.symbolic_function(w)
 
-        log_p = p_w.log_prob(w)
+        # (batch,)
+        log_p = p_w.log_prob(w).sum(-1)
 
         initial_state = self.initial_state(P, y, w)
-        log_q = self.nrm(initial_state)
+        result = self.nrm.forward(initial_state)
+        log_q = torch.stack(result.forward_probabilities, -1).log().sum(-1)
         return (log_q - log_p).pow(2).mean()
 
     def train(self, x: torch.Tensor, y: torch.Tensor) -> Tuple[torch.Tensor, torch.Tensor]:
@@ -76,7 +79,7 @@ class PPEBase(ABC, Generic[ST]):
         - Maximize log prob
         """
         P = self.perception(x)
-        if not self.beliefs:
+        if self.beliefs is None:
             self.beliefs = P
         else:
             self.beliefs = torch.cat((self.beliefs, P), dim=0)
@@ -94,7 +97,9 @@ class PPEBase(ABC, Generic[ST]):
 
         self.perception_optimizer.zero_grad()
         initial_state = self.initial_state(P, y, generate_w=False)
-        log_q_y = self.nrm(initial_state)
+        result = self.nrm.forward(initial_state)
+        stack_ys = torch.stack(result.forward_probabilities, -1).log()
+        log_q_y = stack_ys.sum(-1).mean()
         log_q_y.backward()
         self.perception_optimizer.step()
 

@@ -53,8 +53,12 @@ class MNISTAddModel(PPEBase[MNISTAddState]):
 
     def initial_state(self, P: torch.Tensor, y: Optional[torch.Tensor] = None, w: Optional[torch.Tensor] = None,
                       generate_w=True) -> MNISTAddState:
-        w_list = [w[:, i] for i in range(self.N * 2)]
-        y_list = [torch.floor(y / (10 ** (self.N - i)) % 10).long() for i in range(self.N + 1)]
+        w_list = None
+        if w is not None:
+            w_list = [w[:, i] for i in range(self.N * 2)]
+        y_list = None
+        if y is not None:
+            y_list = [torch.floor(y / (10 ** (self.N - i)) % 10).long() for i in range(self.N + 1)]
         return MNISTAddState(P, self.N, (y_list, w_list), generate_w=generate_w)
 
     def symbolic_function(self, w: torch.Tensor) -> torch.Tensor:

@@ -57,7 +57,6 @@ def fit_dirichlet(beliefs: torch.Tensor, alpha: torch.Tensor, lr=1, iters=1000) 
         optimizer.zero_grad()
 
         loss = -log_p.mean()
-        print(loss, a)
 
         loss.backward(retain_graph=True)
         optimizer.step()

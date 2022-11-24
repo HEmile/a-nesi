@@ -102,9 +102,9 @@ class NRMBase(ABC, nn.Module, Generic[ST]):
             constraint_w = state.constraint[1]
 
             if constraint_y is not None and len(state.y) < len(constraint_y):
-                action = constraint_y[state.y]
+                action = constraint_y[len(state.y)]
             elif constraint_w is not None and len(state.w) < len(constraint_w):
-                action = constraint_w[state.w]
+                action = constraint_w[len(state.w)]
             else:
                 # If we have no conditional/constraint, just sample by amount of samples given
                 #  Otherwise, we first need to set the conditional (no need to have multiple samples there)
