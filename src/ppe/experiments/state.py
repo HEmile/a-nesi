@@ -5,19 +5,19 @@ import torch
 from torch import Tensor
 from torch.nn.functional import one_hot
 
-from ppe.nrm import StateBase
+from ppe.nrm import StateBase, Constraint
 
 StateRep = List[Tensor]
 
 EPS = 1E-6
 
-class MNISTAddState(StateBase[Tensor]):
+class MNISTAddState(StateBase):
 
     l_p: Optional[Tensor] = None
 
-    def __init__(self, probability: torch.Tensor, N: int, constraint: Union[Optional[Tensor], List[Tensor]],
+    def __init__(self, probability: torch.Tensor, N: int, constraint: Constraint,
                  y: List[Tensor] = [], w: List[Tensor] = [], oh_state: List[Tensor] = [],
-                 expanded_pw: Optional[Tensor] = None, final: bool = False):
+                 expanded_pw: Optional[Tensor] = None, generate_w: bool=True, final: bool = False):
         # Assuming probability is a b x 2*N x 10 Tensor
         # state: Contains the sampled digits
         # oh_state: Contains the one-hot encoded digits, but _also_ the one-hot encoded value of y
@@ -31,16 +31,10 @@ class MNISTAddState(StateBase[Tensor]):
         self.w = w
         self.oh_state = oh_state
 
-        if isinstance(constraint, Tensor):
-            self.constraint = []
-            for i in range(N + 1):
-                # Parse a number into a list of digits
-                self.constraint.append(torch.floor(constraint / (10**(N-i)) % 10).long())
-
         if len(w) + len(y) != len(oh_state):
             raise ValueError("oh_state must have the same length as the w and y lists")
 
-        super().__init__(final)
+        super().__init__(generate_w, final)
 
     def next_state(self, action: torch.Tensor) -> MNISTAddState:
         assert not self.final
@@ -74,7 +68,7 @@ class MNISTAddState(StateBase[Tensor]):
     def compute_success(self) -> torch.Tensor:
         assert self.w is not None
         assert self.y is not None
-        assert self.sink
+        assert self.final
         assert len(self.w) == 2 * self.N
         assert len(self.y) == self.N + 1
         # Compute constraint, ie whether the sum of the numbers is equal to the number represented by y
@@ -120,9 +114,6 @@ class MNISTAddState(StateBase[Tensor]):
         return 10 ** self.N - torch.abs(y - (10 ** self.N - 1))
 
     def symbolic_pruner(self) -> torch.Tensor:
-        return self.model_count() > 0
-
-    def model_count(self) -> torch.Tensor:
         if len(self.y) < self.N + 1:
             # if self.constraint is not None:
             #     # Should return the amount of models for each query
@@ -150,3 +141,6 @@ class MNISTAddState(StateBase[Tensor]):
                 # TODO: This assumes for every d1 there is a solution (ie 0 <= constraint - d1 <= 9)
                 return torch.nn.functional.one_hot(d2, 10).int()
         raise NotImplementedError()
+
+    def finished_generating_y(self) -> bool:
+        return len(self.y) == self.N + 1

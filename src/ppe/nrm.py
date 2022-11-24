@@ -9,27 +9,25 @@ from torch.distributions import Categorical
 import math
 
 O = TypeVar('O')
+W = TypeVar('W')
 
-class StateBase(ABC, Generic[O]):
+Constraint = Tuple[Optional[List[torch.Tensor]], Optional[List[torch.Tensor]]]
+
+class StateBase(ABC):
     # The difference between y and the constraint: An empty state when doing learning provides the constraint, and
     #  not y. This is to learn the mapping from the probability to y. When doing inference, we provide y
     #  deterministically at the first step.
-    constraint: Optional[List[O]] = None
-    y: Optional[List[O]] = None
-    # True if this state is a sink
-    final: bool = False
-    # If this state is a sink, this should contain for each sample whether the constraint is satisfied
-    success: Optional[torch.Tensor] = None
+    constraint: Constraint = (None, None)
+    y: Optional[List[torch.Tensor]] = None
+    w: Optional[List[torch.Tensor]] = None
+    # True if this state is final (completely generated)
+    final: bool
+    generate_w: bool
 
-    def __init__(self, final: bool = False):
+    def __init__(self, generate_w: bool=True, final: bool = False):
         super().__init__()
         self.final = final
-        if self.final:
-            self.success = self.compute_success()
-
-    @abstractmethod
-    def compute_success(self) -> torch.Tensor:
-        pass
+        self.generate_w = generate_w
 
     @abstractmethod
     def next_state(self, action: torch.Tensor) -> StateBase:
@@ -48,6 +46,10 @@ class StateBase(ABC, Generic[O]):
     @abstractmethod
     def symbolic_pruner(self) -> torch.Tensor:
         # Uses symbolic reasoning on the current state to figure out which actions are viable. Returns a mask
+        pass
+
+    @abstractmethod
+    def finished_generating_y(self) -> bool:
         pass
 
 
@@ -97,9 +99,13 @@ class NRMBase(ABC, nn.Module, Generic[ST]):
                 distribution = distribution * mask
                 distribution = distribution / distribution.sum(-1, keepdim=True)
 
-            # TODO: We will also need constraints for w
-            if state.constraint is not None and len(state.y) != len(state.constraint):
-                action = state.constraint[len(state.y)]
+            constraint_y = state.constraint[0]
+            constraint_w = state.constraint[1]
+
+            if constraint_y is not None and len(state.y) < len(constraint_y):
+                action = constraint_y[state.y]
+            elif constraint_w is not None and len(state.w) < len(constraint_w):
+                action = constraint_w[state.w]
             else:
                 # If we have no conditional/constraint, just sample by amount of samples given
                 #  Otherwise, we first need to set the conditional (no need to have multiple samples there)
@@ -125,6 +131,9 @@ class NRMBase(ABC, nn.Module, Generic[ST]):
             forward_probabilities.append(s_dist)
             if steps:
                 steps -= 1
+
+            if not state.generate_w and state.finished_generating_y():
+                break
         final_state = state
         return NRMResult(final_state, forward_probabilities, action, s_dist)
 
@@ -139,41 +148,6 @@ class NRMBase(ABC, nn.Module, Generic[ST]):
     @abstractmethod
     def distribution(self, state: ST) -> torch.Tensor:
         pass
-
-    def loss(self, result: NRMResult[ST], is_wmc=True) -> torch.Tensor:
-        # Implements a modified version of trajectory balance
-        # See https://arxiv.org/abs/2201.13259
-        # TODO: I should think about how to make this numerically stable...
-        # Naive implementation: Compute Z * exp log prob, take as target.
-        # This is numerically unstable, as the log prob can be very small, and the partition can be very large.
-        # if is_wmc: Weights output rewards by the probability of the sample.
-        # If not is_wmc: Rewards are just whether the constraint is satisfied. Used for model counting.
-
-        assert result.final_state.final and result.final_state.success is not None
-
-        log_q = torch.stack(result.forward_probabilities, -1).log().sum(-1)
-        # # Why not multiply with partition Z? Because the source node has flow 1!
-        # log_x = log_x + result.partitions[0].unsqueeze(-1).log()
-
-        # let's for now assume it's 1... Since we use the perfect sampler.
-        y = result.final_state.success.float()
-
-        # For things that are not successes, log_p should be a very small negative number.
-        log_p = (1-y) * math.log(1e-8) + result.final_state.log_p_world().detach()
-
-        if self.lossf == 'bce-tb':
-            # Product over forward probabilities
-            x = torch.exp(log_q)
-
-            if is_wmc:
-                # Reward function for weighted model counting weights models by their probability
-                y = y * log_p.exp()
-            if self.experience_replay:
-                pass
-            return nn.BCELoss()(x, y)
-        elif self.lossf == 'mse-tb':
-            return (log_q - log_p).pow(2).mean()
-        raise ValueError(f"Unknown loss function {self.lossf}")
 
 
 class GreedyNRM(NRMBase[ST]):
