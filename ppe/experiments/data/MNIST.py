@@ -1,3 +1,6 @@
+"""
+code adapted from deepproblog repo
+"""
 import itertools
 import json
 import random
