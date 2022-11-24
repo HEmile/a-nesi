@@ -1,0 +1,8 @@
+torch
+torchvision
+wandb
+
+[examples]
+
+[tests]
+pytest

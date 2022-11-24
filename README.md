@@ -17,6 +17,8 @@ Run the following:
 
 2. Activate the virtual environment: `conda activate NRM`
 
+3. Install the NRM module: pip install -e .
+
 ## Experiments
 
 The experiments are presented in the papers are available in the [src/deepproblog/examples](src/deepproblog/examples) directory.

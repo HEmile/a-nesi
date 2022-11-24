@@ -1,0 +1,16 @@
+LICENSE
+MANIFEST.in
+README.md
+setup.py
+ppe/experiments/__init__.py
+ppe/experiments/mnistadd.py
+ppe/experiments/nrm_mnist.py
+ppe/experiments/state.py
+ppe/experiments/data/MNIST.py
+ppe/experiments/data/__init__.py
+ppe/ppe.egg-info/PKG-INFO
+ppe/ppe.egg-info/SOURCES.txt
+ppe/ppe.egg-info/dependency_links.txt
+ppe/ppe.egg-info/not-zip-safe
+ppe/ppe.egg-info/requires.txt
+ppe/ppe.egg-info/top_level.txt

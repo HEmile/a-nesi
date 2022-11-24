@@ -1,0 +1,16 @@
+Metadata-Version: 2.1
+Name: ppe
+Version: 0.0.1
+Summary: Neurosymbolic Reverse Model
+Home-page: https://github.com/HEmile/deepproblog-mc
+Author: Emile van Krieken
+Author-email: e.van.Krieken@vu.nl
+License: MIT
+Classifier: License :: OSI Approved :: Apache Software License
+Classifier: Intended Audience :: Science/Research
+Classifier: Programming Language :: Python :: 3.8
+Classifier: Topic :: Scientific/Engineering :: Artificial Intelligence
+Requires-Python: >=3.8
+Provides-Extra: examples
+Provides-Extra: tests
+License-File: LICENSE

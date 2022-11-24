@@ -2,16 +2,15 @@ from __future__ import annotations
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from typing import Tuple, List, Generic, TypeVar, Callable, Optional
-
 import torch
 from torch import nn
 from torch.distributions import Categorical
-import math
 
 O = TypeVar('O')
 W = TypeVar('W')
 
 Constraint = Tuple[Optional[List[torch.Tensor]], Optional[List[torch.Tensor]]]
+
 
 class StateBase(ABC):
     # The difference between y and the constraint: An empty state when doing learning provides the constraint, and
