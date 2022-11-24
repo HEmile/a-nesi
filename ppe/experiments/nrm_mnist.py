@@ -59,11 +59,10 @@ class MNISTAddModel(PPEBase[MNISTAddState]):
 
     def symbolic_function(self, w: torch.Tensor) -> torch.Tensor:
         """
-        w: (batch_size, 2*n, 10)
+        w: (batch_size, 2*n)
         """
-        ds = w.nonzero().squeeze(-1)
-        stack1 = torch.stack([10 ** (self.N - i - 1) * ds[:self.N][i] for i in range(self.N)], -1)
-        stack2 = torch.stack([10 ** (self.N - i - 1) * ds[self.N:][i] for i in range(self.N)], -1)
+        stack1 = torch.stack([10 ** (self.N - i - 1) * w[:, i] for i in range(self.N)], -1)
+        stack2 = torch.stack([10 ** (self.N - i - 1) * w[:, self.N + i] for i in range(self.N)], -1)
 
         n1 = stack1.sum(-1)
         n2 = stack2.sum(-1)
