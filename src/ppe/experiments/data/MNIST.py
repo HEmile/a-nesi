@@ -11,10 +11,6 @@ from torch.utils.data import Dataset as TorchDataset
 from typing import Callable, List, Iterable, Tuple
 
 
-from deepproblog.dataset import Dataset
-from deepproblog.query import Query
-from problog.logic import Term, list2term, Constant
-
 _DATA_ROOT = Path(__file__).parent
 
 transform = transforms.Compose(
@@ -49,22 +45,6 @@ class MNIST_Images(object):
 
 MNIST_train = MNIST_Images("train")
 MNIST_test = MNIST_Images("test")
-
-
-class MNIST(Dataset):
-    def __len__(self):
-        return len(self.data)
-
-    def to_query(self, i):
-        l = Constant(self.data[i][1])
-        return Query(
-            Term("digit", Term("tensor", Term(self.dataset, Term("a"))), l),
-            substitution={Term("a"): Constant(i)},
-        )
-
-    def __init__(self, dataset):
-        self.dataset = dataset
-        self.data = datasets[dataset]
 
 
 def addition(n: int, dataset: str, seed=None):

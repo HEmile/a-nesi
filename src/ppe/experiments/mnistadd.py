@@ -6,7 +6,6 @@ from torch.utils.data import DataLoader
 from ppe.experiments.data import (
     addition,
 )
-from deepproblog.utils import get_configuration, format_time_precise, config_to_string
 from ppe.experiments.nrm_mnist import MNISTAddModel
 
 LOG_ITER = 100
@@ -18,31 +17,28 @@ if __name__ == '__main__':
     i = int(sys.argv[1]) if len(sys.argv) > 1 else 0
 
     parameters = {
-        "mc_method": ["gfnexact"],
-        "N": [1, 2, 3],
-        "run": range(5),
-        "batch_size": [11],
-        "amt_samples": [7],
-        "lr": [1e-3],
-        "epochs": [20],
-        "hidden_size": [200],
-        "uniform_prob": [0.0],
-        "greedy_prob": [0.0],
-        "prune": [False],
-        "loss": ['mse-tb'],
+        "mc_method": "gfnexact",
+        "N": 1,
+        "batch_size": 11,
+        "amt_samples": 7,
+        "lr": 1e-3,
+        "epochs": 20,
+        "hidden_size": 200,
+        "uniform_prob": 0.0,
+        "greedy_prob": 0.0,
+        "prune": False,
+        "loss": 'mse-tb',
     }
 
     # TODO: Move hyperparameter sweep to wandb sweep
-    args = get_configuration(parameters, i)
+    args = parameters
 
-    name = "addition_" + config_to_string(args) + "_" + format_time_precise()
+    name = "addition_" + str(args["N"])
 
     train_set = addition(args["N"], "train")
     test_set = addition(args["N"], "test")
 
     model = MNISTAddModel(args)
-
-    optimizer_p = torch.optim.Adam(model.parameters(), lr=args["lr"])
 
     loader = DataLoader(train_set, args["batch_size"], False)
 
@@ -60,37 +56,23 @@ if __name__ == '__main__':
     for epoch in range(args["epochs"]):
         print("----------------------------------------")
         print("NEW EPOCH", epoch)
-        cum_loss_p = 0
-        cum_loss_gfn = 0
-        cum_partition = 0
-        cum_prob = 0
+        cum_loss_percept = 0
+        cum_loss_nrm = 0
         print(len(loader))
         for i, batch in enumerate(loader):
-            optimizer_p.zero_grad()
             numb1, numb2, label = batch
 
-            loss_p, loss_gfn, partition, succes_p = model([numb1], [numb2], label, args)
+            x = torch.stack([numb1 + numb2], dim=1)
+            loss_nrm, loss_percept = model.train(x, label)
 
-            cum_loss_p += loss_p.item()
-            cum_loss_gfn += loss_gfn.item()
-            cum_partition += partition.mean().item()
-            cum_prob += succes_p.item()
+            cum_loss_percept += loss_percept.item()
+            cum_loss_nrm += loss_nrm.item()
 
-            total_loss = loss_p + loss_gfn
-            total_loss.backward()
-            optimizer_p.step()
             if (i + 1) % LOG_ITER == 0:
-                total_cum_loss = cum_loss_p + cum_loss_gfn
+                print(f"actor: {cum_loss_percept / LOG_ITER:.4f} gfn: {cum_loss_nrm / LOG_ITER:.4f}" )
 
-                print(f"actor: {cum_loss_p / LOG_ITER:.4f} gfn: {cum_loss_gfn / LOG_ITER:.4f} "
-                      f"partition: {cum_partition / LOG_ITER:.4f} "
-                      f"prob: {cum_prob / LOG_ITER:.4f}")
-
-                wandb.log({"loss": total_cum_loss / LOG_ITER, "succes_prob_train": cum_prob / LOG_ITER,
-                           "sf_loss": cum_loss_p / LOG_ITER, "gfn_loss": cum_loss_gfn / LOG_ITER,
-                           "partition": cum_partition / LOG_ITER},)
-                cum_loss_p = 0
-                cum_loss_gfn = 0
-                cum_partition = 0
-                cum_prob = 0
+                wandb.log({"percept_loss": cum_loss_percept / LOG_ITER,
+                           "nrm_loss": cum_loss_nrm / LOG_ITER},)
+                cum_loss_percept = 0
+                cum_loss_nrm = 0
 
