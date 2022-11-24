@@ -19,8 +19,8 @@ if __name__ == '__main__':
     parameters = {
         "mc_method": "gfnexact",
         "N": 1,
-        "batch_size": 11,
-        "amt_samples": 7,
+        "batch_size": 16,
+        "amt_samples": 100,
         "lr": 1e-3,
         "epochs": 20,
         "hidden_size": 200,
@@ -28,9 +28,9 @@ if __name__ == '__main__':
         "greedy_prob": 0.0,
         "prune": False,
         "loss": 'mse-tb',
-        "dirichlet_init": 500,
-        "dirichlet_lr": 1,
-        "dirichlet_iters": 50
+        "dirichlet_init": 1,
+        "dirichlet_lr": 0.1,
+        "dirichlet_iters": 0
     }
 
     # TODO: Move hyperparameter sweep to wandb sweep
@@ -61,12 +61,11 @@ if __name__ == '__main__':
         print("NEW EPOCH", epoch)
         cum_loss_percept = 0
         cum_loss_nrm = 0
-        print(len(loader))
         for i, batch in enumerate(loader):
             numb1, numb2, label = batch
 
             x = torch.cat([numb1, numb2], dim=1)
-            loss_nrm, loss_percept = model.train(x, label)
+            loss_nrm, loss_percept, P = model.train(x, label)
 
             cum_loss_percept += loss_percept.item()
             cum_loss_nrm += loss_nrm.item()

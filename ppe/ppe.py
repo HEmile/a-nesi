@@ -29,7 +29,7 @@ class PPEBase(ABC, Generic[ST]):
         # We're training these two models separately, so let's also use two different optimizers.
         #  This ensures we won't accidentally update the wrong model.
         self.nrm_optimizer = torch.optim.Adam(self.nrm.parameters())
-        self.perception_optimizer = torch.optim.Adam(self.perception.parameters())
+        self.perception_optimizer = torch.optim.Adam(self.perception.parameters(), lr=0.0001)
 
         self.alpha = torch.ones((len(belief_size), max(belief_size))) * initial_concentration
         self.alpha.requires_grad = True
@@ -94,16 +94,18 @@ class PPEBase(ABC, Generic[ST]):
         nrm_loss.backward()
 
         self.nrm_optimizer.step()
+        self.nrm_optimizer.zero_grad()
 
         self.perception_optimizer.zero_grad()
         initial_state = self.initial_state(P, y, generate_w=False)
         result = self.nrm.forward(initial_state)
         stack_ys = torch.stack(result.forward_probabilities, -1).log()
         log_q_y = stack_ys.sum(-1).mean()
-        log_q_y.backward()
+        loss_percept = -log_q_y
+        loss_percept.backward()
         self.perception_optimizer.step()
 
-        return nrm_loss, log_q_y
+        return nrm_loss, loss_percept, P
 
     @abstractmethod
     def initial_state(self, P: torch.Tensor, y: Optional[torch.Tensor]=None, w: Optional[torch.Tensor]=None, generate_w=True) -> ST:
