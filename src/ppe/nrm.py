@@ -48,6 +48,10 @@ class StateBase(ABC):
         # Uses symbolic reasoning on the current state to figure out which actions are viable. Returns a mask
         pass
 
+    @abstractmethod
+    def finished_generating_y(self) -> bool:
+        pass
+
 
 ST = TypeVar("ST", bound=StateBase)
 
@@ -128,7 +132,7 @@ class NRMBase(ABC, nn.Module, Generic[ST]):
             if steps:
                 steps -= 1
 
-            if not state.generate_w and len(state.y) == ???:
+            if not state.generate_w and state.finished_generating_y():
                 break
         final_state = state
         return NRMResult(final_state, forward_probabilities, action, s_dist)
@@ -144,41 +148,6 @@ class NRMBase(ABC, nn.Module, Generic[ST]):
     @abstractmethod
     def distribution(self, state: ST) -> torch.Tensor:
         pass
-
-    def loss(self, result: NRMResult[ST], is_wmc=True) -> torch.Tensor:
-        # Implements a modified version of trajectory balance
-        # See https://arxiv.org/abs/2201.13259
-        # TODO: I should think about how to make this numerically stable...
-        # Naive implementation: Compute Z * exp log prob, take as target.
-        # This is numerically unstable, as the log prob can be very small, and the partition can be very large.
-        # if is_wmc: Weights output rewards by the probability of the sample.
-        # If not is_wmc: Rewards are just whether the constraint is satisfied. Used for model counting.
-
-        assert result.final_state.final and result.final_state.success is not None
-
-        log_q = torch.stack(result.forward_probabilities, -1).log().sum(-1)
-        # # Why not multiply with partition Z? Because the source node has flow 1!
-        # log_x = log_x + result.partitions[0].unsqueeze(-1).log()
-
-        # let's for now assume it's 1... Since we use the perfect sampler.
-        y = result.final_state.success.float()
-
-        # For things that are not successes, log_p should be a very small negative number.
-        log_p = (1-y) * math.log(1e-8) + result.final_state.log_p_world().detach()
-
-        if self.lossf == 'bce-tb':
-            # Product over forward probabilities
-            x = torch.exp(log_q)
-
-            if is_wmc:
-                # Reward function for weighted model counting weights models by their probability
-                y = y * log_p.exp()
-            if self.experience_replay:
-                pass
-            return nn.BCELoss()(x, y)
-        elif self.lossf == 'mse-tb':
-            return (log_q - log_p).pow(2).mean()
-        raise ValueError(f"Unknown loss function {self.lossf}")
 
 
 class GreedyNRM(NRMBase[ST]):

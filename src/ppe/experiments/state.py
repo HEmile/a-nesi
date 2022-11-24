@@ -114,9 +114,6 @@ class MNISTAddState(StateBase):
         return 10 ** self.N - torch.abs(y - (10 ** self.N - 1))
 
     def symbolic_pruner(self) -> torch.Tensor:
-        return self.model_count() > 0
-
-    def model_count(self) -> torch.Tensor:
         if len(self.y) < self.N + 1:
             # if self.constraint is not None:
             #     # Should return the amount of models for each query
@@ -144,3 +141,6 @@ class MNISTAddState(StateBase):
                 # TODO: This assumes for every d1 there is a solution (ie 0 <= constraint - d1 <= 9)
                 return torch.nn.functional.one_hot(d2, 10).int()
         raise NotImplementedError()
+
+    def finished_generating_y(self) -> bool:
+        return len(self.y) == self.N + 1

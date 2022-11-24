@@ -60,9 +60,6 @@ class PPEBase(ABC, Generic[ST]):
 
         log_p = p_w.log_prob(w)
 
-        # TODO: Compute the log-probability of w and y using the NRM
-        #  Should probably create a state with both w and y as constraints
-        #  Or handle constraints differently!
         initial_state = self.initial_state(P, y, w)
         log_q = self.nrm(initial_state)
         return (log_q - log_p).pow(2).mean()
