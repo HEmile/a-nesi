@@ -93,5 +93,5 @@ if __name__ == '__main__':
         print("Test accuracy: ", prob_sample / len(test_loader))
         wandb.log({
             "epoch": epoch,
-            "Test accuracy: ": prob_sample / len(test_loader),
+            "test_accuracy: ": prob_sample / len(test_loader),
         })
