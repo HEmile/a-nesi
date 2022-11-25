@@ -10,7 +10,8 @@ from torch.distributions import Categorical
 class PPEBase(ABC, Generic[ST]):
 
     def __init__(self, nrm: NRMBase[ST], perception: nn.Module, amount_samples: int, belief_size:List[int],
-                 initial_concentration: float = 500, dirichlet_iters: int = 50, dirichlet_lr: float = 1.0, K_beliefs: int = 100):
+                 initial_concentration: float = 500, dirichlet_iters: int = 50, dirichlet_lr: float = 1.0, K_beliefs: int = 100,
+                 nrm_lr= 1e-3, perception_lr= 1e-3):
         """
         :param nrm: The neurosymbolic reverse model
         :param perception: The perception network. Should accept samples from data
@@ -28,8 +29,8 @@ class PPEBase(ABC, Generic[ST]):
 
         # We're training these two models separately, so let's also use two different optimizers.
         #  This ensures we won't accidentally update the wrong model.
-        self.nrm_optimizer = torch.optim.Adam(self.nrm.parameters())
-        self.perception_optimizer = torch.optim.Adam(self.perception.parameters(), lr=0.0001)
+        self.nrm_optimizer = torch.optim.Adam(self.nrm.parameters(), lr=nrm_lr)
+        self.perception_optimizer = torch.optim.Adam(self.perception.parameters(), lr=perception_lr)
 
         self.alpha = torch.ones((len(belief_size), max(belief_size))) * initial_concentration
         self.alpha.requires_grad = True

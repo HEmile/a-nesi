@@ -21,7 +21,8 @@ if __name__ == '__main__':
         "N": 1,
         "batch_size": 16,
         "amt_samples": 100,
-        "lr": 1e-3,
+        "nrm_lr": 1e-3,
+        "perception_lr": 1e-3,
         "epochs": 20,
         "hidden_size": 200,
         "uniform_prob": 0.0,
@@ -30,7 +31,8 @@ if __name__ == '__main__':
         "loss": 'mse-tb',
         "dirichlet_init": 1,
         "dirichlet_lr": 0.1,
-        "dirichlet_iters": 0
+        "dirichlet_iters": 0,
+        "K_beliefs": 100
     }
 
     # TODO: Move hyperparameter sweep to wandb sweep
