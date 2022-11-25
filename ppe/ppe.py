@@ -21,7 +21,7 @@ class PPEBase(ABC, Generic[ST]):
                  dirichlet_lr: float = 1.0,
                  K_beliefs: int = 100,
                  nrm_lr= 1e-3,
-                 nrm_loss="on-policy",
+                 nrm_loss="mse",
                  perception_lr= 1e-3,
                  perception_loss = 'sampled',
                  device='cpu',
@@ -88,8 +88,11 @@ class PPEBase(ABC, Generic[ST]):
         initial_state = self.initial_state(P, y, w)
         result = self.nrm.forward(initial_state)
         log_q = torch.stack(result.forward_probabilities, -1).log().sum(-1)
-        return (log_q - log_p).pow(2).mean()
-        # return nn.BCELoss()(log_q.exp(), log_p.exp())
+        if self.nrm_loss == 'mse':
+            return (log_q - log_p).pow(2).mean()
+        elif self.nrm_loss == 'bce':
+            return nn.BCELoss()(log_q.exp(), log_p.exp())
+        raise NotImplementedError()
 
     def log_q_loss(self, P: torch.Tensor, y: torch.Tensor):
         """
@@ -131,8 +134,12 @@ class PPEBase(ABC, Generic[ST]):
             log_q_w_y = torch.stack(result.forward_probabilities[len(result.final_state.y):], -1).log().sum(-1)
             log_q = log_q_y + log_q_w_y
             log_p_w = log_p_w.detach().T
-            # nrm_loss = nn.BCELoss()(log_q.exp(), log_p_w.exp())
-            nrm_loss = (log_q - log_p_w).pow(2).mean()
+            if self.nrm_loss == 'mse':
+                nrm_loss = (log_q - log_p_w).pow(2).mean()
+            elif self.nrm_loss == 'bce':
+                nrm_loss = nn.BCELoss()(log_q.exp(), log_p_w.exp())
+            else:
+                raise NotImplementedError()
 
         return percept_loss, nrm_loss
 
@@ -146,30 +153,30 @@ class PPEBase(ABC, Generic[ST]):
         """
         P = self.perception(x)
         self.nrm_optimizer.zero_grad()
-        if self.nrm_loss == "off-policy":
-            if self.beliefs is None:
-                self.beliefs = P
-            else:
-                self.beliefs = torch.cat((self.beliefs, P), dim=0)
-                if self.beliefs.shape[0] > self.K_beliefs:
-                    self.beliefs = self.beliefs[-self.K_beliefs:]
+        # if self.nrm_loss == "off-policy":
+        if self.beliefs is None:
+            self.beliefs = P
+        else:
+            self.beliefs = torch.cat((self.beliefs, P), dim=0)
+            if self.beliefs.shape[0] > self.K_beliefs:
+                self.beliefs = self.beliefs[-self.K_beliefs:]
 
-            nrm_loss = self.off_policy_loss(self.beliefs)
-            nrm_loss.backward()
-            self.nrm_optimizer.step()
-
+        nrm_loss = self.off_policy_loss(self.beliefs)
+        nrm_loss.backward()
+        self.nrm_optimizer.step()
         self.nrm_optimizer.zero_grad()
 
         self.perception_optimizer.zero_grad()
 
         if self.perception_loss == 'sampled':
             loss_percept, _nrm_loss = self.sampled_loss(P, y, True, self.nrm_loss == 'on-policy')
-            if self.nrm_loss == 'on-policy':
-                (loss_percept + _nrm_loss).backward()
-                nrm_loss = _nrm_loss
-                self.nrm_optimizer.step()
-            else:
-                loss_percept.backward()
+            # TODO: On-policy NRM loss is currently disabled
+            # if self.nrm_loss == 'on-policy':
+            #     (loss_percept + _nrm_loss).backward()
+            #     nrm_loss = _nrm_loss
+            #     self.nrm_optimizer.step()
+            # else:
+            loss_percept.backward()
         elif self.perception_loss == 'log-q':
             loss_percept = self.log_q_loss(P, y)
             loss_percept.backward()
