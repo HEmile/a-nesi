@@ -2,6 +2,8 @@ from abc import ABC, abstractmethod
 from typing import Generic, List, Tuple, Optional
 import torch
 from torch import nn
+from torch.nn.functional import one_hot
+
 from nrm import NRMBase, ST, NRMResult
 from fit_dirichlet import fit_dirichlet
 from torch.distributions import Categorical
@@ -9,7 +11,7 @@ from torch.distributions import Categorical
 
 class PPEBase(ABC, Generic[ST]):
 
-    def __init__(self, nrm: NRMBase[ST], perception: nn.Module, amount_samples: int, belief_size:List[int],
+    def __init__(self, nrm: NRMBase[ST], perception: nn.Module, amount_samples: int, belief_size:List[int], perception_loss = 'sampled',
                  initial_concentration: float = 500, dirichlet_iters: int = 50, dirichlet_lr: float = 1.0, K_beliefs: int = 100,
                  nrm_lr= 1e-3, perception_lr= 1e-3):
         """
@@ -26,6 +28,7 @@ class PPEBase(ABC, Generic[ST]):
         self.K_beliefs = K_beliefs
         self.dirichlet_iters = dirichlet_iters
         self.dirichlet_lr = dirichlet_lr
+        self.perception_loss = perception_loss
 
         # We're training these two models separately, so let's also use two different optimizers.
         #  This ensures we won't accidentally update the wrong model.
@@ -72,6 +75,32 @@ class PPEBase(ABC, Generic[ST]):
         log_q = torch.stack(result.forward_probabilities, -1).log().sum(-1)
         return (log_q - log_p).pow(2).mean()
 
+    def log_q_loss(self, P: torch.Tensor, y: torch.Tensor):
+        """
+        Perception loss that maximizes the log probability of the label under the NRM model.
+        """
+        initial_state = self.initial_state(P, y, generate_w=False)
+        result = self.nrm.forward(initial_state)
+        stack_ys = torch.stack(result.forward_probabilities, -1).log()
+        log_q_y = stack_ys.sum(-1).mean()
+        return -log_q_y
+
+    def sampled_loss(self, P: torch.Tensor, y: torch.Tensor):
+        """
+        Perception loss that maximizes the log probability of the label under the NRM model.
+        """
+        initial_state = self.initial_state(P, y, generate_w=True)
+        result = self.nrm.forward(initial_state, amt_samples=self.amount_samples)
+
+        # TODO: This might underflow
+        q_y = torch.stack(result.forward_probabilities[:len(result.final_state.y)], 1).prod(-1)
+        w = torch.stack(result.final_state.w, -1)
+        w = w.permute(1, 0, 2)
+
+        # Take sum of log probs over all dimensions and take the mean over amount of samples
+        log_p_w = Categorical(probs=P).log_prob(w).sum(-1).mean(0)
+        return (-q_y.detach() * log_p_w).mean()
+
     def train(self, x: torch.Tensor, y: torch.Tensor) -> Tuple[torch.Tensor, torch.Tensor]:
         """
         Algorithm 3
@@ -99,11 +128,12 @@ class PPEBase(ABC, Generic[ST]):
         self.nrm_optimizer.zero_grad()
 
         self.perception_optimizer.zero_grad()
-        initial_state = self.initial_state(P, y, generate_w=False)
-        result = self.nrm.forward(initial_state)
-        stack_ys = torch.stack(result.forward_probabilities, -1).log()
-        log_q_y = stack_ys.sum(-1).mean()
-        loss_percept = -log_q_y
+
+        if self.perception_loss == 'sampled':
+            loss_percept = self.sampled_loss(P, y)
+        else:
+            loss_percept = self.log_q_loss(P, y)
+
         loss_percept.backward()
         self.perception_optimizer.step()
 
