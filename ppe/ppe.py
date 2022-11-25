@@ -1,17 +1,27 @@
 from abc import ABC, abstractmethod
 from typing import Generic, List, Tuple, Optional
-import torch
-from torch import nn
 from nrm import NRMBase, ST, NRMResult
 from fit_dirichlet import fit_dirichlet
 from torch.distributions import Categorical
+from torch import nn
+import torch
 
 
 class PPEBase(ABC, Generic[ST]):
 
-    def __init__(self, nrm: NRMBase[ST], perception: nn.Module, amount_samples: int, belief_size:List[int],
-                 initial_concentration: float = 500, dirichlet_iters: int = 50, dirichlet_lr: float = 1.0, K_beliefs: int = 100,
-                 nrm_lr= 1e-3, perception_lr= 1e-3):
+    def __init__(self,
+                 nrm: NRMBase[ST],
+                 perception: nn.Module,
+                 amount_samples: int,
+                 belief_size:List[int],
+                 initial_concentration: float = 500,
+                 dirichlet_iters: int = 50,
+                 dirichlet_lr: float = 1.0,
+                 K_beliefs: int = 100,
+                 nrm_lr= 1e-3,
+                 perception_lr= 1e-3,
+                 device='cpu',
+                 ):
         """
         :param nrm: The neurosymbolic reverse model
         :param perception: The perception network. Should accept samples from data
@@ -32,7 +42,7 @@ class PPEBase(ABC, Generic[ST]):
         self.nrm_optimizer = torch.optim.Adam(self.nrm.parameters(), lr=nrm_lr)
         self.perception_optimizer = torch.optim.Adam(self.perception.parameters(), lr=perception_lr)
 
-        self.alpha = torch.ones((len(belief_size), max(belief_size))) * initial_concentration
+        self.alpha = torch.ones((len(belief_size), max(belief_size)), device=device) * initial_concentration
         self.alpha.requires_grad = True
         self.beliefs = None
 

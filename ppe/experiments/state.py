@@ -15,9 +15,17 @@ class MNISTAddState(StateBase):
 
     l_p: Optional[Tensor] = None
 
-    def __init__(self, probability: torch.Tensor, N: int, constraint: Constraint,
-                 y: List[Tensor] = [], w: List[Tensor] = [], oh_state: List[Tensor] = [],
-                 expanded_pw: Optional[Tensor] = None, generate_w: bool=True, final: bool = False):
+    def __init__(self,
+                 probability: torch.Tensor,
+                 N: int,
+                 constraint: Constraint,
+                 y: List[Tensor] = [],
+                 w: List[Tensor] = [],
+                 oh_state: List[Tensor] = [],
+                 expanded_pw: Optional[Tensor] = None,
+                 generate_w: bool=True,
+                 final: bool = False,
+                 device='cpu'):
         # Assuming probability is a b x 2*N x 10 Tensor
         # state: Contains the sampled digits
         # oh_state: Contains the one-hot encoded digits, but _also_ the one-hot encoded value of y
@@ -30,6 +38,8 @@ class MNISTAddState(StateBase):
         self.y = y
         self.w = w
         self.oh_state = oh_state
+
+        self.device = device
 
         if len(w) + len(y) != len(oh_state):
             raise ValueError("oh_state must have the same length as the w and y lists")
@@ -63,8 +73,16 @@ class MNISTAddState(StateBase):
 
         final = (len(w) == 2 * self.N)
 
-        return MNISTAddState(self.pw, self.N, self.constraint, y, w, oh_state, self.expanded_pw, generate_w=self.generate_w,
-                             final=final)
+        return MNISTAddState(self.pw,
+                             self.N,
+                             self.constraint,
+                             y,
+                             w,
+                             oh_state,
+                             self.expanded_pw,
+                             generate_w=self.generate_w,
+                             final=final,
+                             device=self.device)
 
     def compute_success(self) -> torch.Tensor:
         assert self.w is not None
@@ -129,6 +147,8 @@ class MNISTAddState(StateBase):
                 for i in range(len(self.y[0].shape)):
                     onez_without_nine = onez_without_nine.unsqueeze(0)
                     onez = onez.unsqueeze(0)
+                onez_without_nine = onez_without_nine.to(self.device)
+                onez = onez.to(self.device)
                 return self.y[0].unsqueeze(-1) * onez_without_nine + (1 - self.y[0]).unsqueeze(-1) * onez
             return onez
             # return self._amount_models_y(torch.arange(1, self.n_classes()).unsqueeze(0))

@@ -67,14 +67,17 @@ Sampler = Callable[[torch.Tensor, int, ST], torch.Tensor]
 
 
 class NRMBase(ABC, nn.Module, Generic[ST]):
-    def __init__(self, lossf='mse-tb', prune=True):
+    def __init__(self, prune=True):
         super().__init__()
         # Saves nonzero results. Shouldn't be used when running the Neurosymbolic GFlowNet as it is guaranteed to sample
         #  models.
-        self.lossf = lossf
         self.prune = prune
 
-    def forward(self, state: ST, max_steps: Optional[int] = None, amt_samples=1,
+
+    def forward(self,
+                state: ST,
+                max_steps: Optional[int] = None,
+                amt_samples=1,
                 sampler: Optional[Sampler] = None) -> NRMResult[ST]:
         # sampler: If None, this samples in proportion to the flow.
         # Otherwise, this should be a function that takes the flow, the distribution, the number of samples, and the state, and returns a sample
@@ -94,7 +97,8 @@ class NRMBase(ABC, nn.Module, Generic[ST]):
             if is_binary:
                 distribution = torch.cat([distribution, 1 - distribution], dim=-1)
             if self.prune:
-                mask = state.symbolic_pruner().float()
+                device = distribution.get_device()  # TODO Get device from
+                mask = state.symbolic_pruner().float().to(device)
                 distribution = distribution * mask
                 distribution = distribution / distribution.sum(-1, keepdim=True)
 
@@ -151,8 +155,13 @@ class NRMBase(ABC, nn.Module, Generic[ST]):
 
 class GreedyNRM(NRMBase[ST]):
 
-    def __init__(self, gfn: NRMBase[ST], prune=True, greedy_prob: float = 0.0,
-                 uniform_prob: float = 0.0, loss_f='mse-tb'):
+    def __init__(self,
+                 gfn: NRMBase[ST],
+                 prune=True,
+                 greedy_prob: float = 0.0,
+                 uniform_prob: float = 0.0,
+                 loss_f='mse-tb',
+                 device='cpu'):
         # mc_gfn: Model counting GFlowNet. Might include background knowledge
         # wmc_gfn: Weighted model counting GFlowNet
         super().__init__(loss_f, prune=prune)

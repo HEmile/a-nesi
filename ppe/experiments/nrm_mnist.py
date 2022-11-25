@@ -14,7 +14,7 @@ EPS = 1E-6
 
 class NRMMnist(NRMBase[MNISTAddState]):
 
-    def __init__(self, N: int, hidden_size: int = 200, loss_f='mse-tb'):
+    def __init__(self, N: int, hidden_size: int = 200, loss_f='mse-tb', device='cpu'):
         super().__init__(loss_f)
         self.N = N
 
@@ -24,9 +24,9 @@ class NRMMnist(NRMBase[MNISTAddState]):
         y_size = 1 + N * 10
 
         self.hiddens = nn.ModuleList(hidden_queries +
-                                     [nn.Linear(20 * N + y_size + i * 10, hidden_size) for i in range(2 * N)])
+                                     [nn.Linear(20 * N + y_size + i * 10, hidden_size) for i in range(2 * N)]).to(device)
         self.outputs = nn.ModuleList(output_queries +
-                                     [nn.Linear(hidden_size, 10) for _ in range(2 * N)])
+                                     [nn.Linear(hidden_size, 10) for _ in range(2 * N)]).to(device)
 
     def distribution(self, state: MNISTAddState) -> torch.Tensor:
         p = state.probability_vector()  # .detach()
@@ -42,13 +42,15 @@ class NRMMnist(NRMBase[MNISTAddState]):
 
 class MNISTAddModel(PPEBase[MNISTAddState]):
 
-    def __init__(self, args):
+    def __init__(self, args, device='cpu'):
         self.N = args["N"]
+        self.device = device
         # The NN that will model p(x) (digit classification probabilities)
         hidden_size = args["hidden_size"]
 
-        nrm = NRMMnist(self.N, hidden_size, loss_f=args["loss"])
-        super().__init__(nrm, MNIST_Net(),
+        nrm = NRMMnist(self.N, hidden_size, loss_f=args["loss"], device=device)
+        super().__init__(nrm,
+                         MNIST_Net(device=device),
                          amount_samples=args['amt_samples'],
                          belief_size=[10] * 2 * self.N,
                          dirichlet_lr=args['dirichlet_lr'],
@@ -56,9 +58,13 @@ class MNISTAddModel(PPEBase[MNISTAddState]):
                          initial_concentration=args['dirichlet_init'],
                          K_beliefs=args['K_beliefs'],
                          nrm_lr=args['nrm_lr'],
-                         perception_lr=args['perception_lr'],)
+                         perception_lr=args['perception_lr'],
+                         device=device)
 
-    def initial_state(self, P: torch.Tensor, y: Optional[torch.Tensor] = None, w: Optional[torch.Tensor] = None,
+    def initial_state(self,
+                      P: torch.Tensor,
+                      y: Optional[torch.Tensor] = None,
+                      w: Optional[torch.Tensor] = None,
                       generate_w=True) -> MNISTAddState:
         w_list = None
         if w is not None:
@@ -66,7 +72,7 @@ class MNISTAddModel(PPEBase[MNISTAddState]):
         y_list = None
         if y is not None:
             y_list = [torch.floor(y / (10 ** (self.N - i)) % 10).long() for i in range(self.N + 1)]
-        return MNISTAddState(P, self.N, (y_list, w_list), generate_w=generate_w)
+        return MNISTAddState(P, self.N, (y_list, w_list), generate_w=generate_w, device=self.device)
 
     def symbolic_function(self, w: torch.Tensor) -> torch.Tensor:
         """
