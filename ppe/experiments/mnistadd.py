@@ -26,6 +26,7 @@ if __name__ == '__main__':
         "K_beliefs": 100
     }
 
+    # TODO: Setup hyperparameter sweep
     wandb.init(
         project="test-project",
         entity="nesy-gems",
@@ -34,8 +35,6 @@ if __name__ == '__main__':
         tags=[],
         config=config,
     )
-
-    # TODO: Setup hyperparameter sweep
 
     train_set = addition(config["N"], "train")
     test_set = addition(config["N"], "test")
@@ -60,12 +59,16 @@ if __name__ == '__main__':
 
             if (i + 1) % LOG_ITER == 0:
                 avg_alpha = torch.nn.functional.softplus(model.alpha).mean().item()
-                print(f"actor: {cum_loss_percept / LOG_ITER:.4f} nrm: {cum_loss_nrm / LOG_ITER:.4f} " 
+                print(f"actor: {cum_loss_percept / config['log_iterations']:.4f} "
+                      f"nrm: {cum_loss_nrm / config['log_iterations']:.4f} " 
                       f"avg_alpha: {avg_alpha:.4f}")
 
-                wandb.log({"percept_loss": cum_loss_percept / LOG_ITER,
-                           "nrm_loss": cum_loss_nrm / LOG_ITER,
-                           "avg_alpha": avg_alpha})
+                wandb.log({
+                    "epoch": epoch,
+                    "percept_loss": cum_loss_percept / config['log_iterations'],
+                    "nrm_loss": cum_loss_nrm / config['log_iterations'],
+                    "avg_alpha": avg_alpha,
+                })
                 cum_loss_percept = 0
                 cum_loss_nrm = 0
 
