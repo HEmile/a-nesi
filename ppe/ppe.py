@@ -2,7 +2,7 @@ from abc import ABC, abstractmethod
 from typing import Generic, List, Tuple, Optional
 import torch
 from torch import nn
-from ppe.nrm import NRMBase, ST, O, W
+from ppe.nrm import NRMBase, ST, NRMResult
 from ppe.fit_dirichlet import fit_dirichlet
 from torch.distributions import Categorical
 
@@ -36,18 +36,19 @@ class PPEBase(ABC, Generic[ST]):
         self.alpha.requires_grad = True
         self.beliefs = None
 
-    def sample(self, x: torch.Tensor) -> ST:
+    def sample(self, x: torch.Tensor, P: Optional[torch.Tensor] = None) -> ST:
         """
         Algorithm 1
         Sample from the PPE model
         :param data: The data to sample from
         :return: A sample from the PPE model
         """
-        P = self.perception(x)
+        if P is None:
+            P = self.perception(x)
 
         initial_state = self.initial_state(P)
 
-        return self.nrm(initial_state, amount_samples=self.amount_samples)
+        return self.nrm(initial_state, amt_samples=self.amount_samples)
 
     def nrm_loss(self, beliefs: torch.Tensor) -> torch.Tensor:
         """
@@ -108,6 +109,11 @@ class PPEBase(ABC, Generic[ST]):
 
         return nrm_loss, loss_percept
 
+    def test(self, x: torch.Tensor, y: torch.Tensor) -> torch.Tensor:
+        result = self.sample(x)
+        successes = self.success(result, y).float()
+        return torch.mean(successes)
+
     @abstractmethod
     def initial_state(self, P: torch.Tensor, y: Optional[torch.Tensor]=None, w: Optional[torch.Tensor]=None, generate_w=True) -> ST:
         assert not (y is None and w is not None)
@@ -115,4 +121,12 @@ class PPEBase(ABC, Generic[ST]):
 
     @abstractmethod
     def symbolic_function(self, w: torch.Tensor) -> torch.Tensor:
+        pass
+
+    @abstractmethod
+    def success(self, result: NRMResult[ST], y: torch.Tensor) -> torch.Tensor:
+        """
+        Returns the _probability_ of success. Should probably return the most likely result and compare this instead.
+        # TODO: Use a beam search here somehow to parse y
+        """
         pass

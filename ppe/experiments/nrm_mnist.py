@@ -3,6 +3,7 @@ from typing import Optional
 import torch
 from torch import nn
 
+from nrm import NRMResult
 from ppe.experiments.MNISTNet import MNIST_Net
 from ppe import NRMBase
 from ppe.experiments.state import MNISTAddState
@@ -78,3 +79,8 @@ class MNISTAddModel(PPEBase[MNISTAddState]):
         n2 = stack2.sum(-1)
 
         return n1 + n2
+
+    def success(self, result: NRMResult[MNISTAddState], y: torch.Tensor) -> torch.Tensor:
+        sample_y = result.final_state.y
+        stack = torch.stack([10 ** (self.N - i) * sample_y[i] for i in range(self.N + 1)], -1)
+        return stack.sum(-1) == y.unsqueeze(-1)

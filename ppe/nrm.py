@@ -109,8 +109,8 @@ class NRMBase(ABC, nn.Module, Generic[ST]):
                 # If we have no conditional/constraint, just sample by amount of samples given
                 #  Otherwise, we first need to set the conditional (no need to have multiple samples there)
                 #  But we also only want to do this once, otherwise we get an exponential explosion of samples
-                if state.constraint is None and len(state.y) == 0 or \
-                        len(state.w) == 0 and state.constraint is not None and len(state.constraint) == len(state.y):
+                if state.constraint == (None, None) and len(state.y) == 0 or \
+                        len(state.w) == 0 and state.constraint != (None, None) and len(state.constraint) == len(state.y):
                     n_samples = amt_samples
                 else:
                     n_samples = 1

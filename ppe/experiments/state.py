@@ -43,7 +43,7 @@ class MNISTAddState(StateBase):
         y = self.y
         w = self.w
         oh_state = self.oh_state
-        expanded_pw = self.expanded_pw
+
         if len(y) < self.N + 1:
             y = y + [action]
             if len(y) == 1:
@@ -63,7 +63,7 @@ class MNISTAddState(StateBase):
 
         final = (len(w) == 2 * self.N)
 
-        return MNISTAddState(self.pw, self.N, self.constraint, y, w, oh_state, expanded_pw, generate_w=self.generate_w,
+        return MNISTAddState(self.pw, self.N, self.constraint, y, w, oh_state, self.expanded_pw, generate_w=self.generate_w,
                              final=final)
 
     def compute_success(self) -> torch.Tensor:
@@ -107,12 +107,11 @@ class MNISTAddState(StateBase):
         return self.pw[:, len(self.w)]
 
     def probability_vector(self) -> torch.Tensor:
-        if self.expanded_pw is not None:
+        if len(self.oh_state) > 0 and len(self.oh_state[-1].shape) == 3:
+            if self.expanded_pw is None:
+                self.expanded_pw = self.pw.flatten(1).unsqueeze(1).expand(-1, self.oh_state[-1].shape[1], -1)
             return self.expanded_pw
         return self.pw.flatten(1)
-
-    def _amount_models_y(self, y: torch.Tensor) -> torch.Tensor:
-        return 10 ** self.N - torch.abs(y - (10 ** self.N - 1))
 
     def symbolic_pruner(self) -> torch.Tensor:
         if len(self.y) < self.N + 1:
@@ -127,7 +126,10 @@ class MNISTAddState(StateBase):
             if len(self.y) == self.N:
                 onez_without_nine = torch.ones_like(onez)
                 onez_without_nine[-1] = 0
-                return (torch.outer(self.y[0], onez_without_nine) + torch.outer(1 - self.y[0], onez))
+                for i in range(len(self.y[0].shape)):
+                    onez_without_nine = onez_without_nine.unsqueeze(0)
+                    onez = onez.unsqueeze(0)
+                return self.y[0].unsqueeze(-1) * onez_without_nine + (1 - self.y[0]).unsqueeze(-1) * onez
             return onez
             # return self._amount_models_y(torch.arange(1, self.n_classes()).unsqueeze(0))
         if self.N == 1:

@@ -45,7 +45,8 @@ if __name__ == '__main__':
 
     model = MNISTAddModel(args)
 
-    loader = DataLoader(train_set, args["batch_size"], False)
+    train_loader = DataLoader(train_set, args["batch_size"], False)
+    test_loader = DataLoader(test_set, args["batch_size"], False)
 
     args = args if args else {}
     wandb.init(
@@ -63,7 +64,8 @@ if __name__ == '__main__':
         print("NEW EPOCH", epoch)
         cum_loss_percept = 0
         cum_loss_nrm = 0
-        for i, batch in enumerate(loader):
+
+        for i, batch in enumerate(train_loader):
             numb1, numb2, label = batch
 
             x = torch.cat([numb1, numb2], dim=1)
@@ -82,4 +84,13 @@ if __name__ == '__main__':
                            "avg_alpha": avg_alpha})
                 cum_loss_percept = 0
                 cum_loss_nrm = 0
+
+        print("----- TESTING -----")
+        prob_sample = 0.
+        for i, batch in enumerate(test_loader):
+            numb1, numb2, label = batch
+            x = torch.cat([numb1, numb2], dim=1)
+            prob_sample += model.test(x, label).item()
+
+        print("Test accuracy: ", prob_sample / len(test_loader))
 
