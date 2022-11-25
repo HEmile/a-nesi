@@ -27,6 +27,20 @@ if __name__ == '__main__':
     }
 
     # TODO: Setup hyperparameter sweep
+    # TODO: Move hyperparameter sweep to wandb sweep
+    args = parameters
+
+    name = "addition_" + str(args["N"])
+
+    train_set = addition(args["N"], "train")
+    test_set = addition(args["N"], "test")
+
+    model = MNISTAddModel(args)
+
+    train_loader = DataLoader(train_set, args["batch_size"], False)
+    test_loader = DataLoader(test_set, args["batch_size"], False)
+
+    args = args if args else {}
     wandb.init(
         project="test-project",
         entity="nesy-gems",
@@ -48,7 +62,8 @@ if __name__ == '__main__':
         print("NEW EPOCH", epoch)
         cum_loss_percept = 0
         cum_loss_nrm = 0
-        for i, batch in enumerate(loader):
+
+        for i, batch in enumerate(train_loader):
             numb1, numb2, label = batch
 
             x = torch.cat([numb1, numb2], dim=1)
@@ -71,4 +86,13 @@ if __name__ == '__main__':
                 })
                 cum_loss_percept = 0
                 cum_loss_nrm = 0
+
+        print("----- TESTING -----")
+        prob_sample = 0.
+        for i, batch in enumerate(test_loader):
+            numb1, numb2, label = batch
+            x = torch.cat([numb1, numb2], dim=1)
+            prob_sample += model.test(x, label).item()
+
+        print("Test accuracy: ", prob_sample / len(test_loader))
 
