@@ -67,9 +67,8 @@ class MNISTAddState(StateBase):
 
         # # If we sample multiple samples, then if we deterministically choose using the constraint, it is missing
         # #  the sample dimension. This expands those tensors to include the sample dimension for future computation.
-        # if len(oh_state) == len(self.constraint) + 1:
-        #     expanded_pw = self.pw.flatten(1).unsqueeze(1).expand(-1, w[0].shape[1], -1)
-        #     oh_state[:-1] = map(lambda s: s.unsqueeze(1).expand(-1, w[0].shape[1], -1), oh_state[:-1])
+        if len(oh_state[-1].shape) == 3 and len(oh_state[0].shape) == 2:
+            oh_state[:-1] = map(lambda s: s.unsqueeze(1).expand(-1, w[0].shape[1], -1), oh_state[:-1])
 
         final = (len(w) == 2 * self.N)
 
@@ -162,6 +161,8 @@ class MNISTAddState(StateBase):
                 second_comp = rang >= ny - 9
                 return torch.logical_and(first_comp, second_comp).int()
             else:
+                if len(self.w[0].shape) > len(ny.shape):
+                    ny = ny.unsqueeze(-1)
                 d2 = ny - self.w[0]
                 # TODO: This assumes for every d1 there is a solution (ie 0 <= constraint - d1 <= 9)
                 return torch.nn.functional.one_hot(d2, 10).int()
