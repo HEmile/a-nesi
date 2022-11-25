@@ -60,6 +60,7 @@ class PPEBase(ABC, Generic[ST]):
         Algorithm 2
         For now assumes all w_i are the same size
         """
+        beliefs = beliefs.detach()
         p_P = fit_dirichlet(beliefs, self.alpha, self.dirichlet_lr, self.dirichlet_iters)
         P = p_P.sample((self.amount_samples,))
         p_w = Categorical(probs=P)
@@ -76,6 +77,7 @@ class PPEBase(ABC, Generic[ST]):
         result = self.nrm.forward(initial_state)
         log_q = torch.stack(result.forward_probabilities, -1).log().sum(-1)
         return (log_q - log_p).pow(2).mean()
+        # return nn.BCELoss()(log_q.exp(), log_p.exp())
 
     def log_q_loss(self, P: torch.Tensor, y: torch.Tensor):
         """
@@ -103,18 +105,22 @@ class PPEBase(ABC, Generic[ST]):
         # Take sum of log probs over all dimensions
         log_p_w = Categorical(probs=P).log_prob(w).sum(-1)
 
-        # TODO: This might underflow
         if compute_perception_loss:
-            q_y = torch.stack(result.forward_probabilities[:len(result.final_state.y)], 1).prod(-1)
+            # TODO: This might underflow
+            q_y = torch.stack(
+                result.forward_probabilities[:len(result.final_state.y)], 1
+            ).prod(-1).detach()
 
-            percept_loss = (-q_y.detach() * log_p_w.mean(0)).mean()
+            percept_loss = -(q_y * log_p_w.mean(0)).mean()
 
         if compute_nrm_loss:
             log_q_y = torch.stack(result.forward_probabilities[:len(result.final_state.y)], 1).log().sum(-1)
             log_q_y = log_q_y.unsqueeze(-1)
             log_q_w_y = torch.stack(result.forward_probabilities[len(result.final_state.y):], -1).log().sum(-1)
             log_q = log_q_y + log_q_w_y
-            nrm_loss = (log_q - log_p_w.T).pow(2).mean()
+            log_p_w = log_p_w.detach().T
+            # nrm_loss = nn.BCELoss()(log_q.exp(), log_p_w.exp())
+            nrm_loss = (log_q - log_p_w).pow(2).mean()
 
         return percept_loss, nrm_loss
 

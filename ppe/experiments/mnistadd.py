@@ -10,11 +10,11 @@ if __name__ == '__main__':
         "mc_method": "gfnexact",
         "N": 1,
         "batch_size": 16,
-        "amt_samples": 100,
+        "amt_samples": 7,
         "nrm_lr": 1e-3,
-        "nrm_loss": "off-policy",
+        "nrm_loss": "on-policy",
         "perception_lr": 1e-3,
-        "perception_loss": "log-q",
+        "perception_loss": "sampled",
         "epochs": 20,
         "log_iterations": 100,
         "hidden_size": 200,
@@ -55,6 +55,7 @@ if __name__ == '__main__':
 
     loader = DataLoader(train_set, config["batch_size"], False)
 
+    torch.autograd.set_detect_anomaly(True)
     for epoch in range(config["epochs"]):
         print("----------------------------------------")
         print("NEW EPOCH", epoch)
