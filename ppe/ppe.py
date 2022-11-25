@@ -129,7 +129,6 @@ class PPEBase(ABC, Generic[ST]):
         P = self.perception(x)
         self.nrm_optimizer.zero_grad()
         if self.nrm_loss == "off-policy":
-
             if self.beliefs is None:
                 self.beliefs = P
             else:
@@ -138,6 +137,7 @@ class PPEBase(ABC, Generic[ST]):
                     self.beliefs = self.beliefs[-self.K_beliefs:]
 
             nrm_loss = self.off_policy_loss(self.beliefs)
+            nrm_loss.backward()
             self.nrm_optimizer.step()
 
         self.nrm_optimizer.zero_grad()
