@@ -28,7 +28,7 @@ class NRMMnist(NRMBase[MNISTAddState]):
                                      [nn.Linear(hidden_size, 10) for _ in range(2 * N)])
 
     def distribution(self, state: MNISTAddState) -> torch.Tensor:
-        p = state.probability_vector().detach()
+        p = state.probability_vector()  # .detach()
         layer_index = len(state.oh_state)
         inputs = torch.cat([p] + state.oh_state, -1)
 
