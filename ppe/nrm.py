@@ -97,7 +97,7 @@ class NRMBase(ABC, nn.Module, Generic[ST]):
             if is_binary:
                 distribution = torch.cat([distribution, 1 - distribution], dim=-1)
             if self.prune:
-                device = distribution.get_device()  # TODO Get device from
+                device = distribution.get_device() if distribution.get_device() > 0 else 'cpu'  # HACK!!!
                 mask = state.symbolic_pruner().float().to(device)
                 distribution = distribution * mask
                 distribution = distribution / distribution.sum(-1, keepdim=True)
