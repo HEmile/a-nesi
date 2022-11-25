@@ -58,7 +58,9 @@ class MNISTAddModel(PPEBase[MNISTAddState]):
                          initial_concentration=args['dirichlet_init'],
                          K_beliefs=args['K_beliefs'],
                          nrm_lr=args['nrm_lr'],
+                         nrm_loss=args['nrm_loss'],
                          perception_lr=args['perception_lr'],
+                         perception_loss=args['perception_loss'],
                          device=device)
 
     def initial_state(self,
