@@ -27,24 +27,20 @@ if __name__ == '__main__':
     }
 
     # TODO: Setup hyperparameter sweep
-    # TODO: Move hyperparameter sweep to wandb sweep
-    args = parameters
+    name = "addition_" + str(config["N"])
 
-    name = "addition_" + str(args["N"])
+    train_set = addition(config["N"], "train")
+    test_set = addition(config["N"], "test")
 
-    train_set = addition(args["N"], "train")
-    test_set = addition(args["N"], "test")
+    model = MNISTAddModel(config)
 
-    model = MNISTAddModel(args)
+    train_loader = DataLoader(train_set, config["batch_size"], False)
+    test_loader = DataLoader(test_set, config["batch_size"], False)
 
-    train_loader = DataLoader(train_set, args["batch_size"], False)
-    test_loader = DataLoader(test_set, args["batch_size"], False)
-
-    args = args if args else {}
     wandb.init(
         project="test-project",
         entity="nesy-gems",
-        name="Addition",
+        name=name,
         notes="Test run",
         tags=[],
         config=config,
@@ -72,7 +68,7 @@ if __name__ == '__main__':
             cum_loss_percept += loss_percept.item()
             cum_loss_nrm += loss_nrm.item()
 
-            if (i + 1) % LOG_ITER == 0:
+            if (i + 1) % config['log_iterations'] == 0:
                 avg_alpha = torch.nn.functional.softplus(model.alpha).mean().item()
                 print(f"actor: {cum_loss_percept / config['log_iterations']:.4f} "
                       f"nrm: {cum_loss_nrm / config['log_iterations']:.4f} " 
