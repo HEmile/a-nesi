@@ -7,15 +7,16 @@ import wandb
 
 if __name__ == '__main__':
     config = {
+        "use_cuda": True,
         "mc_method": "gfnexact",
         "N": 1,
-        "batch_size": 16,
-        "amt_samples": 7,
+        "batch_size": 256,
+        "amt_samples": 100,
         "nrm_lr": 1e-3,
         "nrm_loss": "on-policy",
         "perception_lr": 1e-3,
         "perception_loss": "sampled",
-        "epochs": 20,
+        "epochs": 50,
         "log_iterations": 100,
         "hidden_size": 200,
         "uniform_prob": 0.0,
@@ -25,16 +26,20 @@ if __name__ == '__main__':
         "dirichlet_init": 1,
         "dirichlet_lr": 0.1,
         "dirichlet_iters": 10,
-        "K_beliefs": 100
+        "K_beliefs": 100,
     }
 
     # TODO: Setup hyperparameter sweep
     name = "addition_" + str(config["N"])
 
+    # Check for available GPUs
+    use_cuda = config["use_cuda"] and torch.cuda.is_available()
+    device = torch.device('cuda' if use_cuda else 'cpu')
+
     train_set = addition(config["N"], "train")
     test_set = addition(config["N"], "test")
 
-    model = MNISTAddModel(config)
+    model = MNISTAddModel(config, device=device)
 
     train_loader = DataLoader(train_set, config["batch_size"], False)
     test_loader = DataLoader(test_set, config["batch_size"], False)
@@ -48,14 +53,6 @@ if __name__ == '__main__':
         config=config,
     )
 
-    train_set = addition(config["N"], "train")
-    test_set = addition(config["N"], "test")
-
-    model = MNISTAddModel(config)
-
-    loader = DataLoader(train_set, config["batch_size"], False)
-
-    torch.autograd.set_detect_anomaly(True)
     for epoch in range(config["epochs"]):
         print("----------------------------------------")
         print("NEW EPOCH", epoch)
@@ -66,7 +63,7 @@ if __name__ == '__main__':
             numb1, numb2, label = batch
 
             x = torch.cat([numb1, numb2], dim=1)
-            loss_nrm, loss_percept = model.train(x, label)
+            loss_nrm, loss_percept = model.train(x.to(device), label.to(device))
 
             cum_loss_percept += loss_percept.item()
             cum_loss_nrm += loss_nrm.item()
@@ -91,6 +88,10 @@ if __name__ == '__main__':
         for i, batch in enumerate(test_loader):
             numb1, numb2, label = batch
             x = torch.cat([numb1, numb2], dim=1)
-            prob_sample += model.test(x, label).item()
+            prob_sample += model.test(x.to(device), label.to(device)).item()
 
         print("Test accuracy: ", prob_sample / len(test_loader))
+        wandb.log({
+            "epoch": epoch,
+            "Test accuracy: ": prob_sample / len(test_loader),
+        })
