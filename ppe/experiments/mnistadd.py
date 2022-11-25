@@ -29,9 +29,9 @@ if __name__ == '__main__':
         "greedy_prob": 0.0,
         "prune": False,
         "loss": 'mse-tb',
-        "dirichlet_init": 1,
+        "dirichlet_init": 10,
         "dirichlet_lr": 0.1,
-        "dirichlet_iters": 0,
+        "dirichlet_iters": 10,
         "K_beliefs": 100
     }
 
