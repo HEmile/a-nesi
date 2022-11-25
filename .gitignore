@@ -246,3 +246,4 @@ sdd/
 /venv/
 ppe/experiments/wandb/
 ppe/experiments/data/
+ppe/ppe.egg-info/
