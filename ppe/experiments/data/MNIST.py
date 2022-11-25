@@ -12,6 +12,7 @@ import torchvision
 import torchvision.transforms as transforms
 from torch.utils.data import Dataset as TorchDataset
 from typing import Callable, List, Iterable, Tuple
+from torch.utils.data import random_split
 
 
 _DATA_ROOT = Path(__file__).parent
@@ -20,10 +21,15 @@ transform = transforms.Compose(
     [transforms.ToTensor(), transforms.Normalize((0.5,), (0.5,))]
 )
 
-datasets = {
-    "train": torchvision.datasets.MNIST(
+_full_train_set = torchvision.datasets.MNIST(
         root=str(_DATA_ROOT), train=True, download=True, transform=transform
-    ),
+    )
+_train_set, _val_set = random_split(_full_train_set, [50000, 10000])
+
+
+datasets = {
+    "train": _train_set,
+    "val": _val_set,
     "test": torchvision.datasets.MNIST(
         root=str(_DATA_ROOT), train=False, download=True, transform=transform
     ),
@@ -36,18 +42,6 @@ def digits_to_number(digits: Iterable[int]) -> int:
         number *= 10
         number += d
     return number
-
-
-class MNIST_Images(object):
-    def __init__(self, subset):
-        self.subset = subset
-
-    def __getitem__(self, item):
-        return datasets[self.subset][int(item[0])][0]
-
-
-MNIST_train = MNIST_Images("train")
-MNIST_test = MNIST_Images("test")
 
 
 def addition(n: int, dataset: str, seed=None):
