@@ -141,11 +141,12 @@ class PPEBase(ABC, Generic[ST]):
             self.nrm_optimizer.step()
 
         self.perception_optimizer.zero_grad()
-
+        self.nrm_optimizer.zero_grad()
         if self.perception_loss == 'sampled':
-            loss_percept, nrm_loss = self.sampled_loss(P, y, True, self.nrm_loss == 'on-policy')
+            loss_percept, _nrm_loss = self.sampled_loss(P, y, True, self.nrm_loss == 'on-policy')
             if self.nrm_loss == 'on-policy':
-                (loss_percept + nrm_loss).backward()
+                (loss_percept + _nrm_loss).backward()
+                nrm_loss = _nrm_loss
                 self.nrm_optimizer.step()
             else:
                 loss_percept.backward()
