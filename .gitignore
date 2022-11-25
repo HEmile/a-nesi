@@ -1,5 +1,5 @@
 wandb/
-!*.egg-info/
+ppe/ppe.egg-info
 
 ## Core latex/pdflatex auxiliary files:
 *.aux
