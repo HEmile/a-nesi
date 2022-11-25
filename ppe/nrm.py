@@ -73,6 +73,18 @@ class NRMBase(ABC, nn.Module, Generic[ST]):
         #  models.
         self.prune = prune
 
+    def _compute_distribution(self, state: ST) -> torch.Tensor:
+        distribution = self.distribution(state)
+        is_binary = distribution.shape[-1] == 1
+        if is_binary:
+            distribution = torch.cat([distribution, 1 - distribution], dim=-1)
+        if self.prune:
+            device = distribution.get_device() if distribution.get_device() > 0 else 'cpu'  # HACK!!!
+            mask = state.symbolic_pruner().float().to(device)
+            distribution = distribution * mask
+            distribution = distribution / (distribution.sum(-1, keepdim=True) + 1e-8)
+        return distribution
+
 
     def forward(self,
                 state: ST,
@@ -90,17 +102,9 @@ class NRMBase(ABC, nn.Module, Generic[ST]):
         if not sampler:
             sampler = self.regular_sampler
 
-        # The main GFlowNet loop to sample trajectories
         while not state.final and (steps is None or steps > 0):
-            distribution = self.distribution(state)
+            distribution = self._compute_distribution(state)
             is_binary = distribution.shape[-1] == 1
-            if is_binary:
-                distribution = torch.cat([distribution, 1 - distribution], dim=-1)
-            if self.prune:
-                device = distribution.get_device() if distribution.get_device() > 0 else 'cpu'  # HACK!!!
-                mask = state.symbolic_pruner().float().to(device)
-                distribution = distribution * mask
-                distribution = distribution / distribution.sum(-1, keepdim=True)
 
             constraint_y = state.constraint[0]
             constraint_w = state.constraint[1]
@@ -118,6 +122,7 @@ class NRMBase(ABC, nn.Module, Generic[ST]):
                     n_samples = amt_samples
                 else:
                     n_samples = 1
+
                 action = sampler(distribution, n_samples, state)
             state = state.next_state(action)
 
@@ -134,6 +139,37 @@ class NRMBase(ABC, nn.Module, Generic[ST]):
             forward_probabilities.append(s_dist)
             if steps:
                 steps -= 1
+
+            if not state.generate_w and state.finished_generating_y():
+                break
+        final_state = state
+        return NRMResult(final_state, forward_probabilities, action, s_dist)
+
+    def beam(self, initial_state: ST, beam_size: int):
+        # sampler: If None, this samples in proportion to the flow.
+        # Otherwise, this should be a function that takes the flow, the distribution, the number of samples, and the state, and returns a sample
+
+        # Sample (hopefully) positive worlds to estimate gradients
+        forward_probabilities = []
+
+        state = initial_state
+        while not state.final:
+            distribution = self._compute_distribution(state)
+            is_binary = distribution.shape[-1] == 1
+
+            state = state.next_state(action)
+
+            shld_unsqueeze = len(action.shape) < len(distribution.shape)
+            if shld_unsqueeze:
+                action = action.unsqueeze(-1)
+
+            s_dist = distribution.gather(-1, action)
+
+            if shld_unsqueeze:
+                action = action.squeeze(-1)
+            if len(s_dist) > 2:
+                s_dist = s_dist.squeeze(-1)
+            forward_probabilities.append(s_dist)
 
             if not state.generate_w and state.finished_generating_y():
                 break
