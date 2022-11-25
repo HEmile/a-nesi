@@ -91,4 +91,3 @@ if __name__ == '__main__':
             prob_sample += model.test(x, label).item()
 
         print("Test accuracy: ", prob_sample / len(test_loader))
-
