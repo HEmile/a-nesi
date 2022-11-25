@@ -2,8 +2,8 @@ from abc import ABC, abstractmethod
 from typing import Generic, List, Tuple, Optional
 import torch
 from torch import nn
-from ppe.nrm import NRMBase, ST, O, W
-from ppe.fit_dirichlet import fit_dirichlet
+from nrm import NRMBase, ST, O, W
+from fit_dirichlet import fit_dirichlet
 from torch.distributions import Categorical
 
 

@@ -5,7 +5,7 @@ import torch
 from torch import Tensor
 from torch.nn.functional import one_hot
 
-from ppe.nrm import StateBase, Constraint
+from nrm import StateBase, Constraint
 
 StateRep = List[Tensor]
 

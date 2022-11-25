@@ -3,10 +3,10 @@ from typing import Optional
 import torch
 from torch import nn
 
-from ppe.experiments.MNISTNet import MNIST_Net
-from ppe import NRMBase
-from ppe.experiments.state import MNISTAddState
-from ppe.ppe import PPEBase
+from experiments.MNISTNet import MNIST_Net
+from nrm import NRMBase
+from experiments.state import MNISTAddState
+from ppe import PPEBase
 
 EPS = 1E-6
 
