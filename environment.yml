@@ -38,6 +38,7 @@ dependencies:
   - tqdm=4.64.1
   - typing_extensions=4.4.0
   - tzdata=2022f
+  - wandb==0.13.5
   - wheel=0.38.4
   - xz=5.2.6
   - yaml=0.2.5
