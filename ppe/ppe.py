@@ -11,9 +11,9 @@ from torch.distributions import Categorical
 
 class PPEBase(ABC, Generic[ST]):
 
-    def __init__(self, nrm: NRMBase[ST], perception: nn.Module, amount_samples: int, belief_size:List[int], perception_loss = 'sampled',
+    def __init__(self, nrm: NRMBase[ST], perception: nn.Module, amount_samples: int, belief_size:List[int],
                  initial_concentration: float = 500, dirichlet_iters: int = 50, dirichlet_lr: float = 1.0, K_beliefs: int = 100,
-                 nrm_lr= 1e-3, perception_lr= 1e-3):
+                 nrm_lr= 1e-3, nrm_loss="on-policy", perception_lr=1e-3, perception_loss = 'sampled',):
         """
         :param nrm: The neurosymbolic reverse model
         :param perception: The perception network. Should accept samples from data
@@ -21,6 +21,7 @@ class PPEBase(ABC, Generic[ST]):
         :param initial_concentration: The initial concentration of the Dirichlet distribution
         :param K_beliefs: The amount of beliefs to keep to fit the Dirichlet
         """
+        assert not(nrm_loss == "on-policy" and perception_loss == "log-q")
         self.nrm = nrm
         self.perception = perception
         self.amount_samples = amount_samples
@@ -28,6 +29,7 @@ class PPEBase(ABC, Generic[ST]):
         self.K_beliefs = K_beliefs
         self.dirichlet_iters = dirichlet_iters
         self.dirichlet_lr = dirichlet_lr
+        self.nrm_loss = nrm_loss
         self.perception_loss = perception_loss
 
         # We're training these two models separately, so let's also use two different optimizers.
@@ -53,7 +55,7 @@ class PPEBase(ABC, Generic[ST]):
 
         return self.nrm(initial_state, amt_samples=self.amount_samples)
 
-    def nrm_loss(self, beliefs: torch.Tensor) -> torch.Tensor:
+    def off_policy_loss(self, beliefs: torch.Tensor) -> torch.Tensor:
         """
         Algorithm 2
         For now assumes all w_i are the same size
@@ -85,56 +87,72 @@ class PPEBase(ABC, Generic[ST]):
         log_q_y = stack_ys.sum(-1).mean()
         return -log_q_y
 
-    def sampled_loss(self, P: torch.Tensor, y: torch.Tensor):
+    def sampled_loss(self, P: torch.Tensor, y: torch.Tensor, compute_perception_loss: bool, compute_nrm_loss: bool) \
+            -> Tuple[torch.Tensor, torch.Tensor]:
         """
         Perception loss that maximizes the log probability of the label under the NRM model.
         """
-        initial_state = self.initial_state(P, y, generate_w=True)
+        initial_state = self.initial_state(P.detach(), y, generate_w=True)
         result = self.nrm.forward(initial_state, amt_samples=self.amount_samples)
 
-        # TODO: This might underflow
-        q_y = torch.stack(result.forward_probabilities[:len(result.final_state.y)], 1).prod(-1)
+        percept_loss = nrm_loss = 0.
+
         w = torch.stack(result.final_state.w, -1)
         w = w.permute(1, 0, 2)
 
-        # Take sum of log probs over all dimensions and take the mean over amount of samples
-        log_p_w = Categorical(probs=P).log_prob(w).sum(-1).mean(0)
-        return (-q_y.detach() * log_p_w).mean()
+        # Take sum of log probs over all dimensions
+        log_p_w = Categorical(probs=P).log_prob(w).sum(-1)
+
+        # TODO: This might underflow
+        if compute_perception_loss:
+            q_y = torch.stack(result.forward_probabilities[:len(result.final_state.y)], 1).prod(-1)
+
+            percept_loss = (-q_y.detach() * log_p_w.mean(0)).mean()
+
+        if compute_nrm_loss:
+            log_q_y = torch.stack(result.forward_probabilities[:len(result.final_state.y)], 1).log().sum(-1)
+            log_q_y = log_q_y.unsqueeze(-1)
+            log_q_w_y = torch.stack(result.forward_probabilities[len(result.final_state.y):], -1).log().sum(-1)
+            log_q = log_q_y + log_q_w_y
+            nrm_loss = (log_q - log_p_w.T).pow(2).mean()
+
+        return percept_loss, nrm_loss
 
     def train(self, x: torch.Tensor, y: torch.Tensor) -> Tuple[torch.Tensor, torch.Tensor]:
         """
         Algorithm 3
         - Calls algorithm 2 (nrm_loss)
-        - Minimizesnrm  loss using first optimizer
+        - Minimizes nrm loss using first optimizer
         - Computes q(y|P)
         - Maximize log prob
         """
         P = self.perception(x)
-        if self.beliefs is None:
-            self.beliefs = P
-        else:
-            self.beliefs = torch.cat((self.beliefs, P), dim=0)
-            if self.beliefs.shape[0] > self.K_beliefs:
-                self.beliefs = self.beliefs[-self.K_beliefs:]
-
         self.nrm_optimizer.zero_grad()
-        nrm_loss = self.nrm_loss(self.beliefs)
+        if self.nrm_loss == "off-policy":
 
-        # TODO: We gotta be sure this only changes the NRM parameters
-        # TODO: Figure out how to retain the graph. Maybe it's not needed since P is not involved.
-        nrm_loss.backward()
+            if self.beliefs is None:
+                self.beliefs = P
+            else:
+                self.beliefs = torch.cat((self.beliefs, P), dim=0)
+                if self.beliefs.shape[0] > self.K_beliefs:
+                    self.beliefs = self.beliefs[-self.K_beliefs:]
 
-        self.nrm_optimizer.step()
-        self.nrm_optimizer.zero_grad()
+            nrm_loss = self.off_policy_loss(self.beliefs)
+            self.nrm_optimizer.step()
 
         self.perception_optimizer.zero_grad()
 
         if self.perception_loss == 'sampled':
-            loss_percept = self.sampled_loss(P, y)
-        else:
+            loss_percept, nrm_loss = self.sampled_loss(P, y, True, self.nrm_loss == 'on-policy')
+            if self.nrm_loss == 'on-policy':
+                (loss_percept + nrm_loss).backward()
+                self.nrm_optimizer.step()
+            else:
+                loss_percept.backward()
+        elif self.perception_loss == 'log-q':
             loss_percept = self.log_q_loss(P, y)
+            loss_percept.backward()
 
-        loss_percept.backward()
         self.perception_optimizer.step()
 
         return nrm_loss, loss_percept

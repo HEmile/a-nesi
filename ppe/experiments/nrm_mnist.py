@@ -56,7 +56,8 @@ class MNISTAddModel(PPEBase[MNISTAddState]):
                          initial_concentration=args['dirichlet_init'],
                          K_beliefs=args['K_beliefs'],
                          nrm_lr=args['nrm_lr'],
-                         perception_lr=args['perception_lr'],)
+                         perception_lr=args['perception_lr'],
+                         perception_loss=args['perception_loss'],)
 
     def initial_state(self, P: torch.Tensor, y: Optional[torch.Tensor] = None, w: Optional[torch.Tensor] = None,
                       generate_w=True) -> MNISTAddState:
