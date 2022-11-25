@@ -22,8 +22,8 @@ if __name__ == '__main__':
         "loss": 'mse-tb',
         "dirichlet_init": 1,
         "dirichlet_lr": 0.1,
-        "dirichlet_iters": 0,
-        "K_beliefs": 100,
+        "dirichlet_iters": 10,
+        "K_beliefs": 100
     }
 
     wandb.init(
@@ -53,20 +53,19 @@ if __name__ == '__main__':
             numb1, numb2, label = batch
 
             x = torch.cat([numb1, numb2], dim=1)
-            loss_nrm, loss_percept, P = model.train(x, label)
+            loss_nrm, loss_percept = model.train(x, label)
 
             cum_loss_percept += loss_percept.item()
             cum_loss_nrm += loss_nrm.item()
 
-            if (i + 1) % config['log_iterations'] == 0:
-                print(f"actor: {cum_loss_percept / config['log_iterations']:.4f} "
-                      f"gfn: {cum_loss_nrm / config['log_iterations']:.4f}" )
+            if (i + 1) % LOG_ITER == 0:
+                avg_alpha = torch.nn.functional.softplus(model.alpha).mean().item()
+                print(f"actor: {cum_loss_percept / LOG_ITER:.4f} nrm: {cum_loss_nrm / LOG_ITER:.4f} " 
+                      f"avg_alpha: {avg_alpha:.4f}")
 
-                wandb.log({
-                    "epoch": epoch,
-                    "percept_loss": cum_loss_percept / config['log_iterations'],
-                    "nrm_loss": cum_loss_nrm / config['log_iterations'],
-                },)
+                wandb.log({"percept_loss": cum_loss_percept / LOG_ITER,
+                           "nrm_loss": cum_loss_nrm / LOG_ITER,
+                           "avg_alpha": avg_alpha})
                 cum_loss_percept = 0
                 cum_loss_nrm = 0
 

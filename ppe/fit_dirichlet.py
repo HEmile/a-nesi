@@ -1,5 +1,6 @@
 import torch
 from torch.distributions import Dirichlet
+from torch.nn.functional import softplus
 
 # data = torch.tensor([[0.1,  0.5,  0.3,  0.05, 0.05],
 #                      [0.8,  0.01, 0.01, 0.08, 0.1],
@@ -40,10 +41,10 @@ from torch.distributions import Dirichlet
 
 
 def fit_dirichlet(beliefs: torch.Tensor, alpha: torch.Tensor, lr=1, iters=1000) -> Dirichlet:
-    a = alpha
+    a = softplus(alpha)
     data = beliefs
     N = data.shape[0]
-    optimizer = torch.optim.Adam([a], lr=lr)
+    optimizer = torch.optim.Adam([alpha], lr=lr)
     statistics = data.log().mean(0).detach()
     for i in range(iters):
         # Dirichlet log likelihood. See https://tminka.github.io/papers/dirichlet/minka-dirichlet.pdf
@@ -60,4 +61,8 @@ def fit_dirichlet(beliefs: torch.Tensor, alpha: torch.Tensor, lr=1, iters=1000) 
 
         loss.backward(retain_graph=True)
         optimizer.step()
-    return Dirichlet(alpha)
+        # Sometimes the algorithm will find negative numbers during minimizing the log probability.
+        # However alpha needs to be positive.
+        a = softplus(alpha)
+
+    return Dirichlet(a)
