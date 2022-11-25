@@ -106,7 +106,7 @@ class PPEBase(ABC, Generic[ST]):
         loss_percept.backward()
         self.perception_optimizer.step()
 
-        return nrm_loss, loss_percept, P
+        return nrm_loss, loss_percept
 
     @abstractmethod
     def initial_state(self, P: torch.Tensor, y: Optional[torch.Tensor]=None, w: Optional[torch.Tensor]=None, generate_w=True) -> ST:
