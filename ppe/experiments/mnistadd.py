@@ -29,7 +29,6 @@ if __name__ == '__main__':
         "K_beliefs": 100,
     }
 
-    # TODO: Setup hyperparameter sweep
     name = "addition_" + str(config["N"])
 
     # Check for available GPUs
