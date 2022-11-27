@@ -37,12 +37,13 @@ if __name__ == '__main__':
     device = torch.device('cuda' if use_cuda else 'cpu')
 
     train_set = addition(config["N"], "train")
-    test_set = addition(config["N"], "test")
+    val_set = addition(config["N"], "val")
+    # test_set = addition(config["N"], "test")
 
     model = MNISTAddModel(config, device=device)
 
     train_loader = DataLoader(train_set, config["batch_size"], False)
-    test_loader = DataLoader(test_set, config["batch_size"], False)
+    val_loader = DataLoader(val_set, config["batch_size"], False)
 
     wandb.init(
         project="test-project",
@@ -85,13 +86,13 @@ if __name__ == '__main__':
 
         print("----- TESTING -----")
         prob_sample = 0.
-        for i, batch in enumerate(test_loader):
+        for i, batch in enumerate(val_loader):
             numb1, numb2, label = batch
             x = torch.cat([numb1, numb2], dim=1)
             prob_sample += model.test(x.to(device), label.to(device)).item()
 
-        print("Test accuracy: ", prob_sample / len(test_loader))
+        print("Test accuracy: ", prob_sample / len(val_loader))
         wandb.log({
             "epoch": epoch,
-            "test_accuracy: ": prob_sample / len(test_loader),
+            "test_accuracy: ": prob_sample / len(val_loader),
         })
