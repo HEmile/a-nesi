@@ -260,3 +260,4 @@ src/deepproblog/examples/Successor/data/MNIST/
 /venv/
 /src/gflownet/experiments/wandb/
 /src/gflownet/experiments/data/
+/ppe/experiments/
