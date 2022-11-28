@@ -31,7 +31,23 @@ if __name__ == '__main__':
         "K_beliefs": 100,
     }
 
-    name = "addition_" + str(config["N"])
+    if SWEEP:
+        with open('./sweep.yaml', 'r') as f:
+            sweep_config = yaml.load(f, Loader=yaml.FullLoader)
+
+        run = wandb.init(config=sweep_config)
+        config = wandb.config
+    else:
+        name = "addition_" + str(config["N"])
+        wandb.init(
+            project="test-project",
+            entity="nesy-gems",
+            name=name,
+            notes="Test run",
+            mode="disabled",
+            tags=[],
+            config=config,
+        )
 
     # Check for available GPUs
     use_cuda = config["use_cuda"] and torch.cuda.is_available()
@@ -45,22 +61,6 @@ if __name__ == '__main__':
 
     train_loader = DataLoader(train_set, config["batch_size"], False)
     val_loader = DataLoader(val_set, config["batch_size"], False)
-
-    if SWEEP:
-        with open('./sweep.yaml', 'r') as f:
-            sweep_config = yaml.load(f, Loader=yaml.FullLoader)
-
-        run = wandb.init(config=sweep_config)
-        config = wandb.config
-    else:
-        wandb.init(
-            project="test-project",
-            entity="nesy-gems",
-            name=name,
-            notes="Test run",
-            tags=[],
-            config=config,
-        )
 
     # if config["DEBUG"]:
     #     torch.autograd.set_detect_anomaly(True)
