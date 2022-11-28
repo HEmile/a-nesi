@@ -113,5 +113,5 @@ if __name__ == '__main__':
         print("Validation accuracy: ", val_accuracy)
         wandb.log({
             # "epoch": epoch,
-            "val_accuracy: ": val_accuracy,
+            "val_accuracy": val_accuracy,
         })
