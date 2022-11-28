@@ -62,8 +62,8 @@ if __name__ == '__main__':
             config=config,
         )
 
-    if config["DEBUG"]:
-        torch.autograd.set_detect_anomaly(True)
+    # if config["DEBUG"]:
+    #     torch.autograd.set_detect_anomaly(True)
 
     for epoch in range(config["epochs"]):
         print("----------------------------------------")
@@ -92,7 +92,7 @@ if __name__ == '__main__':
                       f"train_accuracy: {prob_sample_train / config['log_iterations']:.4f}")
 
                 wandb.log({
-                    "epoch": epoch,
+                    # "epoch": epoch,
                     "percept_loss": cum_loss_percept / config['log_iterations'],
                     "nrm_loss": cum_loss_nrm / config['log_iterations'],
                     "train_accuracy": prob_sample_train / config['log_iterations'],
@@ -112,6 +112,6 @@ if __name__ == '__main__':
         val_accuracy = prob_sample / len(val_loader)
         print("Validation accuracy: ", val_accuracy)
         wandb.log({
-            "epoch": epoch,
+            # "epoch": epoch,
             "val_accuracy: ": val_accuracy,
         })
