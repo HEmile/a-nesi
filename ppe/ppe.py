@@ -24,7 +24,7 @@ class PPEBase(ABC, Generic[ST]):
                  K_beliefs: int = 100,
                  nrm_lr=1e-3,
                  nrm_loss="mse",
-                 on_policy: bool = False,
+                 policy: str = "both",
                  perception_lr=1e-3,
                  perception_loss='sampled',
                  device='cpu',
@@ -36,7 +36,9 @@ class PPEBase(ABC, Generic[ST]):
         :param initial_concentration: The initial concentration of the Dirichlet distribution
         :param K_beliefs: The amount of beliefs to keep to fit the Dirichlet
         """
-        assert not (on_policy and perception_loss == "log-q")
+        assert perception_loss in ['sampled', 'log-q']
+        assert nrm_loss in ['mse', 'bce']
+        assert policy in ['both', 'off', 'on']
         self.nrm = nrm
         self.perception = perception
         self.amount_samples = amount_samples
@@ -45,7 +47,7 @@ class PPEBase(ABC, Generic[ST]):
         self.dirichlet_iters = dirichlet_iters
         self.dirichlet_lr = dirichlet_lr
         self.nrm_loss = nrm_loss
-        self.on_policy = on_policy
+        self.policy = policy
         self.perception_loss = perception_loss
 
         # We're training these two models separately, so let's also use two different optimizers.
@@ -157,7 +159,8 @@ class PPEBase(ABC, Generic[ST]):
         """
         P = self.perception(x)
         self.nrm_optimizer.zero_grad()
-        if not self.on_policy:
+        nrm_loss = 0.
+        if not self.policy == 'off':
             if self.beliefs is None:
                 self.beliefs = P
             else:
@@ -165,22 +168,30 @@ class PPEBase(ABC, Generic[ST]):
                 if self.beliefs.shape[0] > self.K_beliefs:
                     self.beliefs = self.beliefs[-self.K_beliefs:]
 
-            nrm_loss = self.off_policy_loss(self.beliefs)
-            nrm_loss.backward()
+            _nrm_loss = self.off_policy_loss(self.beliefs)
+            _nrm_loss.backward()
+            nrm_loss += _nrm_loss
             self.nrm_optimizer.step()
             self.nrm_optimizer.zero_grad()
 
         self.perception_optimizer.zero_grad()
 
-        if self.perception_loss == 'sampled':
-            loss_percept, _nrm_loss = self.sampled_loss(P, y, True, self.on_policy)
-            if self.on_policy:
+        use_sampled_loss = self.perception_loss == 'sampled'
+        use_on_policy_loss = not self.policy == 'on'
+
+        if use_sampled_loss or use_on_policy_loss:
+            loss_percept, _nrm_loss = self.sampled_loss(P, y, use_sampled_loss, use_on_policy_loss)
+            if use_sampled_loss and use_on_policy_loss:
                 (loss_percept + _nrm_loss).backward()
-                nrm_loss = _nrm_loss
+                nrm_loss += _nrm_loss
                 self.nrm_optimizer.step()
-            else:
+            elif use_sampled_loss:
                 loss_percept.backward()
-        elif self.perception_loss == 'log-q':
+            elif use_on_policy_loss:
+                _nrm_loss.backward()
+                nrm_loss += _nrm_loss
+                self.nrm_optimizer.step()
+        if self.perception_loss == 'log-q':
             loss_percept = self.log_q_loss(P, y)
             loss_percept.backward()
 

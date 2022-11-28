@@ -15,7 +15,7 @@ if __name__ == '__main__':
         "amt_samples": 7,
         "nrm_lr": 1e-3,
         "nrm_loss": "bce",
-        "on_policy": True,
+        "policy": "both",
         "perception_lr": 1e-3,
         "perception_loss": "sampled",
         "epochs": 50,
