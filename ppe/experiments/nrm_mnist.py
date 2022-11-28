@@ -60,6 +60,7 @@ class MNISTAddModel(PPEBase[MNISTAddState]):
                          K_beliefs=args['K_beliefs'],
                          nrm_lr=args['nrm_lr'],
                          nrm_loss=args['nrm_loss'],
+                         on_policy=args['on_policy'],
                          perception_lr=args['perception_lr'],
                          perception_loss=args['perception_loss'],
                          device=device)

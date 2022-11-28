@@ -15,15 +15,16 @@ class PPEBase(ABC, Generic[ST]):
                  nrm: NRMBase[ST],
                  perception: nn.Module,
                  amount_samples: int,
-                 belief_size:List[int],
+                 belief_size: List[int],
                  initial_concentration: float = 500,
                  dirichlet_iters: int = 50,
                  dirichlet_lr: float = 1.0,
                  K_beliefs: int = 100,
-                 nrm_lr= 1e-3,
+                 nrm_lr=1e-3,
                  nrm_loss="mse",
-                 perception_lr= 1e-3,
-                 perception_loss = 'sampled',
+                 on_policy: bool = False,
+                 perception_lr=1e-3,
+                 perception_loss='sampled',
                  device='cpu',
                  ):
         """
@@ -33,7 +34,7 @@ class PPEBase(ABC, Generic[ST]):
         :param initial_concentration: The initial concentration of the Dirichlet distribution
         :param K_beliefs: The amount of beliefs to keep to fit the Dirichlet
         """
-        assert not(nrm_loss == "on-policy" and perception_loss == "log-q")
+        assert not (on_policy and perception_loss == "log-q")
         self.nrm = nrm
         self.perception = perception
         self.amount_samples = amount_samples
@@ -42,6 +43,7 @@ class PPEBase(ABC, Generic[ST]):
         self.dirichlet_iters = dirichlet_iters
         self.dirichlet_lr = dirichlet_lr
         self.nrm_loss = nrm_loss
+        self.on_policy = on_policy
         self.perception_loss = perception_loss
 
         # We're training these two models separately, so let's also use two different optimizers.
@@ -153,30 +155,29 @@ class PPEBase(ABC, Generic[ST]):
         """
         P = self.perception(x)
         self.nrm_optimizer.zero_grad()
-        # if self.nrm_loss == "off-policy":
-        if self.beliefs is None:
-            self.beliefs = P
-        else:
-            self.beliefs = torch.cat((self.beliefs, P), dim=0)
-            if self.beliefs.shape[0] > self.K_beliefs:
-                self.beliefs = self.beliefs[-self.K_beliefs:]
+        if not self.on_policy:
+            if self.beliefs is None:
+                self.beliefs = P
+            else:
+                self.beliefs = torch.cat((self.beliefs, P), dim=0)
+                if self.beliefs.shape[0] > self.K_beliefs:
+                    self.beliefs = self.beliefs[-self.K_beliefs:]
 
-        nrm_loss = self.off_policy_loss(self.beliefs)
-        nrm_loss.backward()
-        self.nrm_optimizer.step()
-        self.nrm_optimizer.zero_grad()
+            nrm_loss = self.off_policy_loss(self.beliefs)
+            nrm_loss.backward()
+            self.nrm_optimizer.step()
+            self.nrm_optimizer.zero_grad()
 
         self.perception_optimizer.zero_grad()
 
         if self.perception_loss == 'sampled':
-            loss_percept, _nrm_loss = self.sampled_loss(P, y, True, self.nrm_loss == 'on-policy')
-            # TODO: On-policy NRM loss is currently disabled
-            # if self.nrm_loss == 'on-policy':
-            #     (loss_percept + _nrm_loss).backward()
-            #     nrm_loss = _nrm_loss
-            #     self.nrm_optimizer.step()
-            # else:
-            loss_percept.backward()
+            loss_percept, _nrm_loss = self.sampled_loss(P, y, True, self.on_policy)
+            if self.on_policy:
+                (loss_percept + _nrm_loss).backward()
+                nrm_loss = _nrm_loss
+                self.nrm_optimizer.step()
+            else:
+                loss_percept.backward()
         elif self.perception_loss == 'log-q':
             loss_percept = self.log_q_loss(P, y)
             loss_percept.backward()
@@ -191,7 +192,8 @@ class PPEBase(ABC, Generic[ST]):
         return torch.mean(successes)
 
     @abstractmethod
-    def initial_state(self, P: torch.Tensor, y: Optional[torch.Tensor]=None, w: Optional[torch.Tensor]=None, generate_w=True) -> ST:
+    def initial_state(self, P: torch.Tensor, y: Optional[torch.Tensor] = None, w: Optional[torch.Tensor] = None,
+                      generate_w=True) -> ST:
         assert not (y is None and w is not None)
         pass
 
