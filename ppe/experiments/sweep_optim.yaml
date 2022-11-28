@@ -13,8 +13,8 @@ parameters:
     values: [1]
   use_cuda:
     values: [True]
-  log_iterations:
-    values: [50]
+  log_per_epoch:
+    values: [10]
   epochs:
     values: [13]
   batch_size:
