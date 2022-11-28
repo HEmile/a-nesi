@@ -17,7 +17,7 @@ if __name__ == '__main__':
         "perception_lr": 1e-3,
         "perception_loss": "log-q",
         "epochs": 50,
-        "log_iterations": 100,
+        "log_iterations": 20,
         "hidden_size": 200,
         "uniform_prob": 0.0,
         "greedy_prob": 0.0,
@@ -58,30 +58,37 @@ if __name__ == '__main__':
         print("NEW EPOCH", epoch)
         cum_loss_percept = 0
         cum_loss_nrm = 0
+        prob_sample_train = 0
 
         for i, batch in enumerate(train_loader):
             numb1, numb2, label = batch
 
-            x = torch.cat([numb1, numb2], dim=1)
-            loss_nrm, loss_percept = model.train(x.to(device), label.to(device))
+            x = torch.cat([numb1, numb2], dim=1).to(device)
+            label = label.to(device)
+            loss_nrm, loss_percept = model.train(x, label)
 
             cum_loss_percept += loss_percept.item()
             cum_loss_nrm += loss_nrm.item()
+
+            prob_sample_train += model.test(x, label).item()
 
             if (i + 1) % config['log_iterations'] == 0:
                 avg_alpha = torch.nn.functional.softplus(model.alpha).mean().item()
                 print(f"actor: {cum_loss_percept / config['log_iterations']:.4f} "
                       f"nrm: {cum_loss_nrm / config['log_iterations']:.4f} " 
-                      f"avg_alpha: {avg_alpha:.4f}")
+                      f"avg_alpha: {avg_alpha:.4f} ",
+                      f"train_accuracy: {prob_sample_train / config['log_iterations']:.4f}")
 
                 wandb.log({
                     "epoch": epoch,
                     "percept_loss": cum_loss_percept / config['log_iterations'],
                     "nrm_loss": cum_loss_nrm / config['log_iterations'],
+                    "train_accuracy": prob_sample_train / config['log_iterations'],
                     "avg_alpha": avg_alpha,
                 })
                 cum_loss_percept = 0
                 cum_loss_nrm = 0
+                prob_sample_train = 0
 
         print("----- TESTING -----")
         prob_sample = 0.
