@@ -20,7 +20,7 @@ if __name__ == '__main__':
         "perception_lr": 1e-3,
         "perception_loss": "log-q",
         "epochs": 30,
-        "log_iterations": 50,
+        "log_per_epoch": 10,
         "hidden_size": 200,
         # "uniform_prob": 0.0,
         # "greedy_prob": 0.0,
@@ -62,6 +62,8 @@ if __name__ == '__main__':
     train_loader = DataLoader(train_set, config["batch_size"], False)
     val_loader = DataLoader(val_set, config["batch_size"], False)
 
+    log_iterations = len(train_loader) // config["log_per_epoch"]
+
     # if config["DEBUG"]:
     #     torch.autograd.set_detect_anomaly(True)
 
@@ -84,18 +86,18 @@ if __name__ == '__main__':
 
             prob_sample_train += model.test(x, label).item()
 
-            if (i + 1) % config['log_iterations'] == 0:
+            if (i + 1) % log_iterations == 0:
                 avg_alpha = torch.nn.functional.softplus(model.alpha).mean().item()
-                print(f"actor: {cum_loss_percept / config['log_iterations']:.4f} "
-                      f"nrm: {cum_loss_nrm / config['log_iterations']:.4f} " 
+                print(f"actor: {cum_loss_percept / log_iterations:.4f} "
+                      f"nrm: {cum_loss_nrm / log_iterations:.4f} " 
                       f"avg_alpha: {avg_alpha:.4f} ",
-                      f"train_accuracy: {prob_sample_train / config['log_iterations']:.4f}")
+                      f"train_accuracy: {prob_sample_train / log_iterations:.4f}")
 
                 wandb.log({
                     # "epoch": epoch,
-                    "percept_loss": cum_loss_percept / config['log_iterations'],
-                    "nrm_loss": cum_loss_nrm / config['log_iterations'],
-                    "train_accuracy": prob_sample_train / config['log_iterations'],
+                    "percept_loss": cum_loss_percept / log_iterations,
+                    "nrm_loss": cum_loss_nrm / log_iterations,
+                    "train_accuracy": prob_sample_train / log_iterations,
                     "avg_alpha": avg_alpha,
                 })
                 cum_loss_percept = 0
