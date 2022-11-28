@@ -132,11 +132,6 @@ class MNISTAddState(StateBase):
 
     def symbolic_pruner(self) -> torch.Tensor:
         if len(self.y) < self.N + 1:
-            # if self.constraint is not None:
-            #     # Should return the amount of models for each query
-            #     # return one_hot(self.constraint, self.n_classes()) * self._amount_models_y(self.constraint).unsqueeze(-1)
-            #     return torch.ones_like(self.constraint).unsqueeze(-1).expand(-1, self.n_classes())
-            # TODO: This isn't an actual model count but I couldn't be bothered lol
             if len(self.y) == 0:
                 return torch.ones((2,)).unsqueeze(0)
             onez = torch.ones((10,))
@@ -148,9 +143,11 @@ class MNISTAddState(StateBase):
                     onez = onez.unsqueeze(0)
                 onez_without_nine = onez_without_nine.to(self.device)
                 onez = onez.to(self.device)
-                return self.y[0].unsqueeze(-1) * onez_without_nine + (1 - self.y[0]).unsqueeze(-1) * onez
+                # TODO: Test if this is ever nonzero
+                is_19s = self.y[0] * torch.prod(torch.stack([self.oh_state[i + 1][:, 9] for i in range(self.N - 1)], -1), -1)
+                is_19s = is_19s.unsqueeze(-1)
+                return is_19s * onez_without_nine + (1 - is_19s).unsqueeze(-1) * onez
             return onez
-            # return self._amount_models_y(torch.arange(1, self.n_classes()).unsqueeze(0))
         if self.N == 1:
             # We'll do other cases later
             ny = self.query_to_number()
