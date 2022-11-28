@@ -3,36 +3,49 @@ project: test-project
 entity: nesy-gems
 method: random
 metric:
-  name: test_accuracy
+  name: val_accuracy
   goal: maximize
+early_terminate:
+  type: hyperband
+  min_iter: 4
 parameters:
+  N:
+    values: [1]
+  use_cuda:
+    values: [True]
+  log_iterations:
+    values: [50]
   batch_size:
-    values: [64, 256, 1024]
+    values: [ 16, 64, 256, 1024]
   amt_samples:
-    values: [ 64, 256, 1024 ]
+    values: [ 16, 64, 256, 1024 ]
   K_beliefs:
-    values: [ 1000, 10000 ]
+    values: [ 100, 1000, 10000 ]
   nrm_lr:
     distribution: log_uniform_values
-    min: 1e-5
+    min: 1e-4
     max: 1e-1
   perception_lr:
     distribution: log_uniform_values
-    min: 1e-5
+    min: 1e-4
     max: 1e-1
   dirichlet_lr:
     distribution: log_uniform_values
     min: 1e-3
     max: 1
   dirichlet_iters:
-    distribution: log_uniform_values
+    distribution: q_log_uniform_values
     min: 1
     max: 100
   nrm_loss:
     values: [ 'mse', 'bce' ]
   perception_loss:
     values: [ 'log-q', 'sampled' ]
+  prune:
+    values: [True]
+  policy:
+    values: [ 'off' , 'on', 'both']
   hidden_size:
-    distribution: log_uniform_values
+    distribution: q_log_uniform_values
     min: 20
     max: 2000
