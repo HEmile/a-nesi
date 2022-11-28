@@ -39,6 +39,10 @@ parameters:
     distribution: q_log_uniform_values
     min: 1
     max: 100
+  dirichlet_init:
+    distribution: log_uniform_values
+    min: 1e-1
+    max: 10
   nrm_loss:
     values: [ 'mse', 'bce' ]
   perception_loss:
