@@ -104,7 +104,6 @@ class NRMBase(ABC, nn.Module, Generic[ST]):
 
         while not state.final and (steps is None or steps > 0):
             distribution = self._compute_distribution(state)
-            is_binary = distribution.shape[-1] == 1
 
             constraint_y = state.constraint[0]
             constraint_w = state.constraint[1]
