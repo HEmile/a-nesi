@@ -29,8 +29,8 @@ if __name__ == '__main__':
         "hidden_size": [200],
         "uniform_prob": [0.0],
         "greedy_prob": [0.0],
-        "prune": [False],
-        "loss": ['mse-tb'],
+        "prune": [True],
+        "loss": ['bce-tb', 'mse-tb'],
     }
 
     # TODO: Move hyperparameter sweep to wandb sweep
@@ -54,7 +54,7 @@ if __name__ == '__main__':
         notes=name,
         tags=[args['mc_method']],
         config=args,
-        mode="disabled",
+        mode="disabled"
     )
 
     with torch.autograd.set_detect_anomaly(True):

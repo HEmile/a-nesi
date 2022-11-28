@@ -6,7 +6,6 @@ from typing import Tuple, List, Generic, TypeVar, Callable, Optional
 import torch
 from torch import nn
 from torch.distributions import Categorical
-import math
 
 O = TypeVar('O')
 
@@ -14,8 +13,8 @@ class StateBase(ABC, Generic[O]):
     # The difference between y and the constraint: An empty state when doing learning provides the constraint, and
     #  not y. This is to learn the mapping from the probability to y. When doing inference, we provide y
     #  deterministically at the first step.
-    constraint: Optional[List[O]] = None
-    y: Optional[List[O]] = None
+    constraint: Optional[O] = None
+    y: Optional[O] = None
     # True if this state is a sink
     sink: bool = False
     # If this state is a sink, this should contain for each sample whether the constraint is satisfied
@@ -36,7 +35,7 @@ class StateBase(ABC, Generic[O]):
         pass
 
     @abstractmethod
-    def log_p_world(self) -> torch.Tensor:
+    def log_prob(self) -> torch.Tensor:
         # UNconditional log probability of the state (ie, prob of state irrespective of constraint)
         pass
 
@@ -63,12 +62,15 @@ ST = TypeVar("ST", bound=StateBase)
 @dataclass
 class GFlowNetResult(Generic[ST]):
     final_state: ST
+    trajectory_flows: List[torch.Tensor]
+    partitions: List[torch.Tensor]
     forward_probabilities: List[torch.Tensor]
     final_action: torch.Tensor
+    final_flow: torch.Tensor
     final_distribution: torch.Tensor
 
 
-Sampler = Callable[[torch.Tensor, int, ST], torch.Tensor]
+Sampler = Callable[[torch.Tensor, torch.Tensor, int, ST], torch.Tensor]
 FlowPostProcessor = Callable[[torch.Tensor, ST], torch.Tensor]
 
 
@@ -82,63 +84,63 @@ class GFlowNetBase(ABC, nn.Module, Generic[ST]):
             self.replay_buffer = set[List[ST]]()
         self.lossf = lossf
 
-    def forward(self, state: ST, max_steps: Optional[int] = None, amt_samples=1,
+    def forward(self, state: ST, max_steps: Optional[int] = None, amt_samples=1, has_expanded=False,
                 sampler: Optional[Sampler] = None, flow_pp: Optional[FlowPostProcessor] = None) -> GFlowNetResult[ST]:
         # sampler: If None, this samples in proportion to the flow.
         # Otherwise, this should be a function that takes the flow, the distribution, the number of samples, and the state, and returns a sample
 
         # Sample (hopefully) positive worlds to estimate gradients
+        flows = []
+        partitions = []
         forward_probabilities = []
         steps = max_steps
         assert not state.sink and (steps is None or steps > 0)
 
-        if not sampler:
-            sampler = self.regular_sampler
-
         # The main GFlowNet loop to sample trajectories
         while not state.sink and (steps is None or steps > 0):
-            distribution = self.distribution(state)
-            is_binary = distribution.shape[-1] == 1
+            flow = self.flow(state)
             if flow_pp is not None:
-                # TODO: This won't work for binary RVs
-                distribution = flow_pp(distribution, state)
-                distribution = distribution / distribution.sum(-1, keepdim=True)
+                flow = flow_pp(flow, state)
+            partition = flow.sum(-1)
+            # TODO: all flows we use are normalized, I think we can drop this term.
+            distribution = flow / partition.unsqueeze(-1)
 
-            # TODO: We will also need constraints for w
-            if state.constraint is not None and len(state.y) != len(state.constraint):
-                action = state.constraint[len(state.y)]
+            if state.constraint is not None and state.y is None:
+                action = state.constraint
+                # This is the conditional partition!
+                partition = flow.mean(-1)
             else:
-                # If we have no conditional/constraint, just sample by amount of samples given
-                #  Otherwise, we first need to set the conditional (no need to have multiple samples there)
-                #  But we also only want to do this once, otherwise we get an exponential explosion of samples
-                if state.constraint is None and len(state.y) == 0 or \
-                        len(state.w) == 0 and state.constraint is not None and len(state.constraint) == len(state.y):
+                # TODO: properly chose amt_samples
+                if not has_expanded:
                     n_samples = amt_samples
+                    has_expanded = True
                 else:
                     n_samples = 1
-                action = sampler(distribution, n_samples, state)
+                if sampler is None:
+                    action = self.regular_sampler(flow, distribution, n_samples, state)
+                else:
+                    action = sampler(flow, distribution, n_samples, state)
             state = state.next_state(action)
 
-            shld_unsqueeze = len(action.shape) < len(distribution.shape)
+            shld_unsqueeze = len(action.shape) < len(flow.shape)
             if shld_unsqueeze:
                 action = action.unsqueeze(-1)
-
-            if is_binary:
-                s_dist = distribution * action + (1-distribution) * (1-action)
-            else:
-                s_dist = distribution.gather(-1, action)
-
+            s_flow = flow.gather(-1, action)
+            s_dist = distribution.gather(-1, action)
             if shld_unsqueeze:
                 action = action.squeeze(-1)
-            if len(s_dist) > 2:
+            if len(s_flow) > 2:
+                s_flow = s_flow.squeeze(-1)
                 s_dist = s_dist.squeeze(-1)
+            flows.append(s_flow)
+            partitions.append(partition)
             forward_probabilities.append(s_dist)
             if steps:
                 steps -= 1
         final_state = state
-        return GFlowNetResult(final_state, forward_probabilities, action, s_dist)
+        return GFlowNetResult(final_state, flows, partitions, forward_probabilities, action, flow, distribution)
 
-    def regular_sampler(self, distribution: torch.Tensor, amt_samples: int,
+    def regular_sampler(self, flow: torch.Tensor, distribution: torch.Tensor, amt_samples: int,
                         state: ST) -> torch.Tensor:
         sample_shape = (amt_samples,) if amt_samples > 1 else ()
         action = Categorical(distribution).sample(sample_shape)
@@ -147,7 +149,7 @@ class GFlowNetBase(ABC, nn.Module, Generic[ST]):
         return action
 
     @abstractmethod
-    def distribution(self, state: ST) -> torch.Tensor:
+    def flow(self, state: ST) -> torch.Tensor:
         pass
 
     def loss(self, result: GFlowNetResult[ST], is_wmc=True) -> torch.Tensor:
@@ -161,28 +163,26 @@ class GFlowNetBase(ABC, nn.Module, Generic[ST]):
 
         assert result.final_state.sink and result.final_state.success is not None
 
-        log_q = torch.stack(result.forward_probabilities, -1).log().sum(-1)
-        # # Why not multiply with partition Z? Because the source node has flow 1!
-        # log_x = log_x + result.partitions[0].unsqueeze(-1).log()
+        log_x = torch.stack(result.forward_probabilities[1:], -1).log().sum(-1)
+        # Why not multiply with partition Z? Because the source node has flow 1!
+        log_x = log_x + result.partitions[0].unsqueeze(-1).log()
 
         # let's for now assume it's 1... Since we use the perfect sampler.
         y = result.final_state.success.float()
-
-        # For things that are not successes, log_p should be a very small negative number.
-        log_p = (1-y) * math.log(1e-8) + result.final_state.log_p_world().detach()
+        log_y = y * result.final_state.log_prob().detach()
 
         if self.lossf == 'bce-tb':
             # Product over forward probabilities
-            x = torch.exp(log_q)
+            x = torch.exp(log_x)
 
             if is_wmc:
                 # Reward function for weighted model counting weights models by their probability
-                y = y * log_p.exp()
+                y = y * log_y.exp()
             if self.experience_replay:
                 pass
             return nn.BCELoss()(x, y)
         elif self.lossf == 'mse-tb':
-            return (log_q - log_p).pow(2).mean()
+            return (log_x - log_y).pow(2).mean()
         raise ValueError(f"Unknown loss function {self.lossf}")
 
 
@@ -200,7 +200,9 @@ class NeSyGFlowNet(GFlowNetBase[ST]):
 
     def forward(self, state: ST, max_steps: Optional[int] = None, amt_samples=1,
                 sampler: Optional[Sampler] = None, flow_pp: Optional[FlowPostProcessor] = None) -> GFlowNetResult[ST]:
-        probs = []
+        flows = []
+        partitions = []
+        forward_probabilities = []
 
         if sampler is not None:
             print("WARNING: Sampler is ignored in NeSyGFlowNet")
@@ -209,44 +211,48 @@ class NeSyGFlowNet(GFlowNetBase[ST]):
         while not state.sink and (steps is None or steps > 0):
             # TODO: This is kinda hacky. This assumes we first deterministically select a constraint, then we start
             #  sampling worlds from there.
+            n_samples = amt_samples if len(flows) == 1 else 1
+
             # Run the weighted model counting GFlowNet. Sample proportionally, but prune impossible actions (if self.prune)
-            result = self.gfn(state, max_steps=1, amt_samples=amt_samples,
-                              flow_pp=self.prune_actions if self.prune else None)
+            result = self.gfn(state, max_steps=1, amt_samples=n_samples, flow_pp=self.prune_actions if self.prune else None, has_expanded=len(flows) > 1)
 
             # Choose which action to use
             mc_prob = self.greedy_prob + self.uniform_prob
             if mc_prob > 0.000001:
                 # Sample using background knowledge (mostly runs the greedy sampler)
-                # !!This is not used in the current iteration of the framework, and can be ignored for now!!
                 mc_action = self.mc_sampler(amt_samples, state)
 
                 mask = torch.bernoulli(torch.fill(torch.empty_like(mc_action, dtype=torch.float), mc_prob)).bool()
                 action = torch.where(mask, mc_action, result.final_action)
-
-                # Move to next state
-                state = state.next_state(action)
-                should_unsqueeze = len(action.shape) < len(result.final_distribution.shape)
-                if should_unsqueeze:
-                    action = action.unsqueeze(-1)
-                # Update states
-                p = result.final_distribution.gather(-1, action)
-
-                if len(p.shape) > 2:
-                    p = p.squeeze(-1)
-
-                if should_unsqueeze:
-                    action = action.squeeze(-1)
             else:
                 action = result.final_action
-                state = result.final_state
-                p = result.final_distribution
 
-            probs.append(p)
+            should_unsqueeze = len(action.shape) < len(result.final_flow.shape)
+            if should_unsqueeze:
+                action = action.unsqueeze(-1)
+            # Update states
+            flow = result.final_flow.gather(-1, action)
+            p = result.final_distribution.gather(-1, action)
+
+            if len(flow.shape) > 2:
+                flow = flow.squeeze(-1)
+                p = p.squeeze(-1)
+
+            flows.append(flow)
+            partitions.append(result.partitions[0])
+            forward_probabilities.append(p)
+
+            if should_unsqueeze:
+                action = action.squeeze(-1)
+
+            # Move to next state
+            state = state.next_state(action)
 
             if steps:
                 steps -= 1
 
-        return GFlowNetResult(state, probs, action, result.final_distribution)
+        return GFlowNetResult(state, flows, partitions, forward_probabilities,
+                              action, result.final_flow, result.final_distribution)
 
     def prune_actions(self, flow: torch.Tensor, state: ST) -> torch.Tensor:
         # Adjusts the flow such that actions for which there are no models are never sampled
@@ -288,11 +294,11 @@ class NeSyGFlowNet(GFlowNetBase[ST]):
             return uniform_samples
         return greedy_samples
 
-    def distribution(self, state: ST) -> torch.Tensor:
-        dist = self.gfn.distribution(state)
+    def flow(self, state: ST) -> torch.Tensor:
+        flow = self.gfn.flow(state)
         if self.prune:
-            return self.prune_actions(dist, state)
-        return dist
+            return self.prune_actions(flow, state)
+        return flow
 
     def loss(self, result: GFlowNetResult[ST], is_wmc=True) -> torch.Tensor:
         return self.gfn.loss(result, is_wmc=True)

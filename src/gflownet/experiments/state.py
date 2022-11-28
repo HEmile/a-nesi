@@ -1,5 +1,5 @@
 from __future__ import annotations
-from typing import List, Optional, Tuple, Union
+from typing import List, Optional, Tuple
 
 import torch
 from torch import Tensor
@@ -15,91 +15,69 @@ class MNISTAddState(StateBase[Tensor]):
 
     l_p: Optional[Tensor] = None
 
-    def __init__(self, probability: torch.Tensor, N: int, constraint: Union[Optional[Tensor], List[Tensor]],
-                 y: List[Tensor] = [], w: List[Tensor] = [], oh_state: List[Tensor] = [],
+    def __init__(self, probability: torch.Tensor, N: int, constraint: Optional[Tensor], y: Optional[Tensor] = None,
+                 state: List[Tensor] = [], oh_state: List[Tensor] = [],
                  expanded_pw: Optional[Tensor] = None, sink: bool = False):
         # Assuming probability is a b x 2*N x 10 Tensor
         # state: Contains the sampled digits
         # oh_state: Contains the one-hot encoded digits, but _also_ the one-hot encoded value of y
-        assert 2 * N >= len(w)
+        assert 2 * N >= len(state)
         self.N = N
         self.pw = probability
         self.expanded_pw = expanded_pw
 
         self.constraint = constraint
         self.y = y
-        self.w = w
+        self.state = state
         self.oh_state = oh_state
 
-        if isinstance(constraint, Tensor):
-            self.constraint = []
-            for i in range(N + 1):
-                # Parse a number into a list of digits
-                self.constraint.append(torch.floor(constraint / (10**(N-i)) % 10).long())
-
-        if len(w) + len(y) != len(oh_state):
-            raise ValueError("oh_state must have the same length as the w and y lists")
+        if len(oh_state) > 0 and len(state) != len(oh_state) - 1:
+            raise ValueError("state and oh_state must have the same length up to 1")
 
         super().__init__(sink)
 
     def next_state(self, action: torch.Tensor) -> MNISTAddState:
         assert not self.sink
-        assert len(self.w) < 2 * self.N
+        assert len(self.state) < 2 * self.N
 
         y = self.y
-        w = self.w
+        state = self.state
         oh_state = self.oh_state
         expanded_pw = self.expanded_pw
-        if len(y) < self.N + 1:
-            y = y + [action]
-            if len(y) == 1:
-                # Binary RVs don't need one-hot.
-                oh_state = oh_state + [action.float().unsqueeze(-1)]
-            else:
-                oh_state = oh_state + [one_hot(action, 10).float()]
+        if self.y is None:
+            oh_state = oh_state + [one_hot(action, self.n_classes()).float()]
+            y = action
         else:
-            w = w + [action]
+            state = state + [action]
             oh_state = oh_state + [one_hot(action, 10).float()]
+        if len(state) == 1:
+            expanded_pw = self.pw.flatten(1).unsqueeze(1).expand(-1, state[0].shape[1], -1)
+            oh_state[0] = self.oh_state[0].unsqueeze(1).expand(-1, state[0].shape[1], -1)
 
-        # If we sample multiple samples, then if we deterministically choose using the constraint, it is missing
-        #  the sample dimension. This expands those tensors to include the sample dimension for future computation.
-        if len(oh_state) == len(self.constraint) + 1:
-            expanded_pw = self.pw.flatten(1).unsqueeze(1).expand(-1, w[0].shape[1], -1)
-            oh_state[:-1] = map(lambda s: s.unsqueeze(1).expand(-1, w[0].shape[1], -1), oh_state[:-1])
-
-        sink = len(w) == 2 * self.N
-        return MNISTAddState(self.pw, self.N, self.constraint, y, w, oh_state, expanded_pw, sink)
+        sink = len(state) == 2 * self.N
+        return MNISTAddState(self.pw, self.N, self.constraint, y, state, oh_state, expanded_pw, sink)
 
     def compute_success(self) -> torch.Tensor:
-        assert self.w is not None
+        assert self.state is not None
         assert self.y is not None
         assert self.sink
-        assert len(self.w) == 2 * self.N
-        assert len(self.y) == self.N + 1
-        # Compute constraint, ie whether the sum of the numbers is equal to the number represented by y
-        stack1 = torch.stack([10 ** (self.N - i - 1) * self.w[:self.N][i] for i in range(self.N)], -1)
-        stack2 = torch.stack([10 ** (self.N - i - 1) * self.w[self.N:][i] for i in range(self.N)], -1)
-
+        assert len(self.state) == 2 * self.N
+        # Compute constraint, ie whether the sum of the numbers is equal to the query
+        stack1 = torch.stack([10 ** (self.N - i - 1) * self.state[:self.N][i] for i in range(self.N)], -1)
+        stack2 = torch.stack([10 ** (self.N - i - 1) * self.state[self.N:][i] for i in range(self.N)], -1)
         n1 = stack1.sum(-1)
         n2 = stack2.sum(-1)
-
-        ny = self.query_to_number().unsqueeze(-1)
-
-        return n1 + n2 == ny
-
-    def query_to_number(self) -> torch.Tensor:
-        stacky = torch.stack([10 ** (self.N - i) * self.y[i] for i in range(self.N + 1)], -1)
-        return stacky.sum(-1)
+        return n1 + n2 == self.y.unsqueeze(-1)
 
     def n_classes(self) -> int:
         return 2 * (10 ** self.N) - self.N
 
-    def log_p_world(self) -> torch.Tensor:
+    def log_prob(self) -> torch.Tensor:
         if self.l_p is not None:
             # Cached log prob
             return self.l_p
         sum = 0.
-        for i, d in enumerate(self.w):
+        for i, d in enumerate(self.state):
             sum += (self.pw[:, i] + EPS).log().gather(1, d)
         self.l_p = sum
         return sum
@@ -111,7 +89,7 @@ class MNISTAddState(StateBase[Tensor]):
                 return one_hot(self.constraint)
             model_count = self.model_count()
             return model_count / model_count.sum(-1, keepdim=True)
-        return self.pw[:, len(self.w)]
+        return self.pw[:, len(self.state)]
 
     def probability_vector(self) -> torch.Tensor:
         if self.expanded_pw is not None:
@@ -122,26 +100,23 @@ class MNISTAddState(StateBase[Tensor]):
         return 10 ** self.N - torch.abs(y - (10 ** self.N - 1))
 
     def model_count(self) -> torch.Tensor:
-        if len(self.y) < self.N + 1:
-            # if self.constraint is not None:
-            #     # Should return the amount of models for each query
-            #     # return one_hot(self.constraint, self.n_classes()) * self._amount_models_y(self.constraint).unsqueeze(-1)
-            #     return torch.ones_like(self.constraint).unsqueeze(-1).expand(-1, self.n_classes())
-            # TODO: This isn't an actual model count but I couldn't be bothered lol
-            if len(self.y) == 0:
-                return torch.ones((2,)).unsqueeze(-1)
-            return torch.ones((10,)).unsqueeze(-1)
-            # return self._amount_models_y(torch.arange(1, self.n_classes()).unsqueeze(0))
+        if self.y is None:
+            if self.constraint is not None:
+                # Should return the amount of models for each query
+                # return one_hot(self.constraint, self.n_classes()) * self._amount_models_y(self.constraint).unsqueeze(-1)
+                return torch.ones_like(self.constraint).unsqueeze(-1).expand(-1, self.n_classes())
+            return self._amount_models_y(torch.arange(1, self.n_classes()).unsqueeze(0))
         if self.N == 1:
             # We'll do other cases later
-            ny = self.query_to_number().unsqueeze(-1)
-            if len(self.w) == 0:
-                rang = torch.arange(10, device=ny.device).unsqueeze(0)
-                first_comp = rang <= ny
-                second_comp = rang >= ny - 9
+
+            if len(self.state) == 0:
+                query = self.y.unsqueeze(-1)
+                rang = torch.arange(10, device=query.device).unsqueeze(0)
+                first_comp = rang <= query
+                second_comp = rang >= query - 9
                 return torch.logical_and(first_comp, second_comp).int()
             else:
-                d2 = ny - self.w[0]
+                d2 = self.y.unsqueeze(-1) - self.state[0]
                 # TODO: This assumes for every d1 there is a solution (ie 0 <= constraint - d1 <= 9)
                 return torch.nn.functional.one_hot(d2, 10).int()
         raise NotImplementedError()
