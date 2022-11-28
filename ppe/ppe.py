@@ -9,6 +9,8 @@ from fit_dirichlet import fit_dirichlet
 from torch.distributions import Categorical
 
 
+EPS = 1e-8
+
 class PPEBase(ABC, Generic[ST]):
 
     def __init__(self,
@@ -131,9 +133,9 @@ class PPEBase(ABC, Generic[ST]):
             percept_loss = -(log_p_w.mean(0)).mean()
 
         if compute_nrm_loss:
-            log_q_y = torch.stack(result.forward_probabilities[:len(result.final_state.y)], 1).log().sum(-1)
+            log_q_y = (torch.stack(result.forward_probabilities[:len(result.final_state.y)], 1) + EPS).log().sum(-1)
             log_q_y = log_q_y.unsqueeze(-1)
-            log_q_w_y = torch.stack(result.forward_probabilities[len(result.final_state.y):], -1).log().sum(-1)
+            log_q_w_y = (torch.stack(result.forward_probabilities[len(result.final_state.y):], -1) + EPS).log().sum(-1)
             log_q = log_q_y + log_q_w_y
             log_p_w = log_p_w.detach().T
             if self.nrm_loss == 'mse':

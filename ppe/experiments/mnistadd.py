@@ -8,6 +8,7 @@ import wandb
 if __name__ == '__main__':
     config = {
         "use_cuda": True,
+        "DEBUG": False,
         "mc_method": "gfnexact",
         "N": 1,
         "batch_size": 11,
@@ -52,6 +53,9 @@ if __name__ == '__main__':
         tags=[],
         config=config,
     )
+
+    if config["DEBUG"]:
+        torch.autograd.set_detect_anomaly(True)
 
     for epoch in range(config["epochs"]):
         print("----------------------------------------")
