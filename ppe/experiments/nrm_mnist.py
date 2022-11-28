@@ -14,17 +14,18 @@ EPS = 1E-6
 
 class NRMMnist(NRMBase[MNISTAddState]):
 
-    def __init__(self, N: int, hidden_size: int = 200, loss_f='mse-tb', device='cpu'):
-        super().__init__(loss_f)
+    def __init__(self, N: int, hidden_size: int = 200, prune: bool = True, device='cpu'):
+        super().__init__(prune)
         self.N = N
 
-        hidden_queries = [nn.Linear(20 * N + (1 + (i - 1) * 10 if i >= 1 else 0), hidden_size) for i in range(N+1)]
+        hidden_queries = [nn.Linear(20 * N + (1 + (i - 1) * 10 if i >= 1 else 0), hidden_size) for i in range(N + 1)]
         output_queries = [nn.Linear(hidden_size, 1)] + [nn.Linear(hidden_size, 10) for _ in range(N)]
 
         y_size = 1 + N * 10
 
         self.hiddens = nn.ModuleList(hidden_queries +
-                                     [nn.Linear(20 * N + y_size + i * 10, hidden_size) for i in range(2 * N)]).to(device)
+                                     [nn.Linear(20 * N + y_size + i * 10, hidden_size) for i in range(2 * N)]).to(
+            device)
         self.outputs = nn.ModuleList(output_queries +
                                      [nn.Linear(hidden_size, 10) for _ in range(2 * N)]).to(device)
 
@@ -48,7 +49,7 @@ class MNISTAddModel(PPEBase[MNISTAddState]):
         # The NN that will model p(x) (digit classification probabilities)
         hidden_size = args["hidden_size"]
 
-        nrm = NRMMnist(self.N, hidden_size, loss_f=args["loss"], device=device)
+        nrm = NRMMnist(self.N, hidden_size, prune=args["prune"], device=device)
         super().__init__(nrm,
                          MNIST_Net(device=device),
                          amount_samples=args['amt_samples'],
