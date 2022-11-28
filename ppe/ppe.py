@@ -128,7 +128,7 @@ class PPEBase(ABC, Generic[ST]):
                 result.forward_probabilities[:len(result.final_state.y)], 1
             ).prod(-1).detach()
 
-            percept_loss = -(q_y * log_p_w.mean(0)).mean()
+            percept_loss = -(log_p_w.mean(0)).mean()
 
         if compute_nrm_loss:
             log_q_y = torch.stack(result.forward_probabilities[:len(result.final_state.y)], 1).log().sum(-1)
