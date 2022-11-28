@@ -1,28 +1,30 @@
+import yaml
 from torch.utils.data import DataLoader
 from experiments.data import addition
 from experiments.nrm_mnist import MNISTAddModel
 import torch
 import wandb
 
+SWEEP = True
 
 if __name__ == '__main__':
     config = {
         "use_cuda": True,
-        "mc_method": "gfnexact",
+        "DEBUG": False,
         "N": 1,
         "batch_size": 256,
         "amt_samples": 100,
         "nrm_lr": 1e-3,
-        "nrm_loss": "mse",
+        "nrm_loss": "bce",
+        "policy": "both",
         "perception_lr": 1e-3,
         "perception_loss": "log-q",
-        "epochs": 50,
-        "log_iterations": 20,
+        "epochs": 30,
+        "log_iterations": 50,
         "hidden_size": 200,
-        "uniform_prob": 0.0,
-        "greedy_prob": 0.0,
+        # "uniform_prob": 0.0,
+        # "greedy_prob": 0.0,
         "prune": True,
-        "loss": 'mse-tb',
         "dirichlet_init": 1,
         "dirichlet_lr": 0.1,
         "dirichlet_iters": 10,
@@ -44,14 +46,24 @@ if __name__ == '__main__':
     train_loader = DataLoader(train_set, config["batch_size"], False)
     val_loader = DataLoader(val_set, config["batch_size"], False)
 
-    wandb.init(
-        project="test-project",
-        entity="nesy-gems",
-        name=name,
-        notes="Test run",
-        tags=[],
-        config=config,
-    )
+    if SWEEP:
+        with open('./sweep.yaml', 'r') as f:
+            sweep_config = yaml.load(f, Loader=yaml.FullLoader)
+
+        run = wandb.init(config=sweep_config)
+        config = wandb.config
+    else:
+        wandb.init(
+            project="test-project",
+            entity="nesy-gems",
+            name=name,
+            notes="Test run",
+            tags=[],
+            config=config,
+        )
+
+    if config["DEBUG"]:
+        torch.autograd.set_detect_anomaly(True)
 
     for epoch in range(config["epochs"]):
         print("----------------------------------------")
@@ -90,15 +102,16 @@ if __name__ == '__main__':
                 cum_loss_nrm = 0
                 prob_sample_train = 0
 
-        print("----- TESTING -----")
+        print("----- VALIDATING -----")
         prob_sample = 0.
         for i, batch in enumerate(val_loader):
             numb1, numb2, label = batch
             x = torch.cat([numb1, numb2], dim=1)
             prob_sample += model.test(x.to(device), label.to(device)).item()
 
-        print("Test accuracy: ", prob_sample / len(val_loader))
+        val_accuracy = prob_sample / len(val_loader)
+        print("Validation accuracy: ", val_accuracy)
         wandb.log({
             "epoch": epoch,
-            "test_accuracy: ": prob_sample / len(val_loader),
+            "val_accuracy: ": val_accuracy,
         })

@@ -37,8 +37,10 @@ class NRMMnist(NRMBase[MNISTAddState]):
         z = torch.relu(self.hiddens[layer_index](inputs))
         logits = self.outputs[layer_index](z)
         if len(state.oh_state) > 0:
-            return torch.softmax(logits, -1)
-        return torch.sigmoid(logits)
+            dist = torch.softmax(logits, -1)
+            return dist
+        dist = torch.sigmoid(logits)
+        return dist
 
 
 class MNISTAddModel(PPEBase[MNISTAddState]):
@@ -60,6 +62,7 @@ class MNISTAddModel(PPEBase[MNISTAddState]):
                          K_beliefs=args['K_beliefs'],
                          nrm_lr=args['nrm_lr'],
                          nrm_loss=args['nrm_loss'],
+                         policy=args['policy'],
                          perception_lr=args['perception_lr'],
                          perception_loss=args['perception_loss'],
                          device=device)

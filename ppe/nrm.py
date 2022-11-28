@@ -74,17 +74,18 @@ class NRMBase(ABC, nn.Module, Generic[ST]):
         self.prune = prune
 
     def _compute_distribution(self, state: ST) -> torch.Tensor:
-        distribution = self.distribution(state)
-        is_binary = distribution.shape[-1] == 1
+        _distribution = self.distribution(state)
+        is_binary = _distribution.shape[-1] == 1
         if is_binary:
-            distribution = torch.cat([distribution, 1 - distribution], dim=-1)
+            _distribution = torch.cat([_distribution, 1 - _distribution], dim=-1)
         if self.prune:
-            device = distribution.get_device() if distribution.get_device() > 0 else 'cpu'  # HACK!!!
+            device = _distribution.get_device() if _distribution.get_device() > 0 else 'cpu'  # HACK!!!
             mask = state.symbolic_pruner().float().to(device)
-            distribution = distribution * mask
+            distribution = _distribution * mask
             distribution = distribution / (distribution.sum(-1, keepdim=True) + 1e-8)
+        else:
+            distribution = _distribution
         return distribution
-
 
     def forward(self,
                 state: ST,
@@ -104,7 +105,6 @@ class NRMBase(ABC, nn.Module, Generic[ST]):
 
         while not state.final and (steps is None or steps > 0):
             distribution = self._compute_distribution(state)
-            is_binary = distribution.shape[-1] == 1
 
             constraint_y = state.constraint[0]
             constraint_w = state.constraint[1]
@@ -155,7 +155,6 @@ class NRMBase(ABC, nn.Module, Generic[ST]):
         state = initial_state
         while not state.final:
             distribution = self._compute_distribution(state)
-            is_binary = distribution.shape[-1] == 1
 
             state = state.next_state(action)
 

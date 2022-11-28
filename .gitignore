@@ -247,3 +247,4 @@ sdd/
 ppe/experiments/wandb/
 ppe/experiments/data/
 ppe/ppe.egg-info/
+src/gflownet/experiments/
