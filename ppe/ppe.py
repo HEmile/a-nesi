@@ -91,7 +91,7 @@ class PPEBase(ABC, Generic[ST]):
 
         initial_state = self.initial_state(P, y, w)
         result = self.nrm.forward(initial_state)
-        log_q = torch.stack(result.forward_probabilities, -1).log().sum(-1)
+        log_q = (torch.stack(result.forward_probabilities, -1) + EPS).log().sum(-1)
         if self.nrm_loss == 'mse':
             return (log_q - log_p).pow(2).mean()
         elif self.nrm_loss == 'bce':
@@ -104,7 +104,7 @@ class PPEBase(ABC, Generic[ST]):
         """
         initial_state = self.initial_state(P, y, generate_w=False)
         result = self.nrm.forward(initial_state)
-        stack_ys = torch.stack(result.forward_probabilities, -1).log()
+        stack_ys = (torch.stack(result.forward_probabilities, -1) + EPS).log()
         log_q_y = stack_ys.sum(-1).mean()
         return -log_q_y
 
