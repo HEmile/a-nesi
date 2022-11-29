@@ -1,0 +1,10 @@
+N: 1
+batch_size: 64
+amt_samples: 1024
+nrm_lr: 0.006
+perception_lr: 0.0014
+nrm_loss: 'bce'
+perception_loss: 'sampled'
+prune: True
+policy: 'on'
+hidden_size: 450

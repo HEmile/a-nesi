@@ -160,7 +160,7 @@ class PPEBase(ABC, Generic[ST]):
         P = self.perception(x)
         self.nrm_optimizer.zero_grad()
         nrm_loss = 0.
-        if not self.policy == 'off':
+        if not self.policy == 'on':
             if self.beliefs is None:
                 self.beliefs = P
             else:
@@ -177,7 +177,7 @@ class PPEBase(ABC, Generic[ST]):
         self.perception_optimizer.zero_grad()
 
         use_sampled_loss = self.perception_loss == 'sampled'
-        use_on_policy_loss = not self.policy == 'on'
+        use_on_policy_loss = not self.policy == 'off'
 
         if use_sampled_loss or use_on_policy_loss:
             loss_percept, _nrm_loss = self.sampled_loss(P, y, use_sampled_loss, use_on_policy_loss)

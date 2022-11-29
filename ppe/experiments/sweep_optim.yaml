@@ -20,7 +20,7 @@ parameters:
   batch_size:
     values: [ 4, 8, 16, 32, 64]
   amt_samples:
-    values: [ 8, 16, 64, 256, 1024 ]
+    values: [ 16, 64, 256, 1024 ]
   K_beliefs:
     values: [ 100, 1000 ]
   nrm_lr:
@@ -29,8 +29,8 @@ parameters:
     max: 1e-1
   perception_lr:
     distribution: log_uniform_values
-    min: 1e-4
-    max: 1e-1
+    min: 1e-5
+    max: 1e-2
   dirichlet_lr:
     distribution: log_uniform_values
     min: 1e-3
@@ -52,7 +52,7 @@ parameters:
   prune:
     values: [True]
   policy:
-    values: [ 'off' , 'both']
+    values: [ 'on' , 'both']
     probabilities: [0.7, 0.3]
   hidden_size:
     distribution: q_log_uniform_values
