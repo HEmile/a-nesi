@@ -1,3 +1,5 @@
+import argparse
+
 import yaml
 from torch.utils.data import DataLoader
 from experiments.data import addition
@@ -31,12 +33,24 @@ if __name__ == '__main__':
         "K_beliefs": 100,
     }
 
-    if SWEEP:
-        with open('./sweep.yaml', 'r') as f:
+    parser = argparse.ArgumentParser()
+    parser.add_argument('--config', type=str, default=None)
+    config_file = parser.parse_args().config
+    if config_file is not None:
+        with open(config_file, 'r') as f:
+            config.update(yaml.safe_load(f))
+
+        run = wandb.init(config=config, project="test-project", entity="nesy-gems")
+        config = wandb.config
+        print(config)
+    elif SWEEP:
+        # TODO: I don't get how it's supposed to know what yaml file to open here.
+        with open("./sweep.yaml", 'r') as f:
             sweep_config = yaml.load(f, Loader=yaml.FullLoader)
 
         run = wandb.init(config=sweep_config)
         config = wandb.config
+        print(config)
     else:
         name = "addition_" + str(config["N"])
         wandb.init(
