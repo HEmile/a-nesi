@@ -50,7 +50,7 @@ parameters:
   prune:
     values: [True]
   policy:
-    values: [ 'off' , 'on', 'both']
+    values: [ 'on', 'both']
   hidden_size:
     distribution: q_log_uniform_values
     min: 20

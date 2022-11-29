@@ -35,7 +35,8 @@ if __name__ == '__main__':
 
     parser = argparse.ArgumentParser()
     parser.add_argument('--config', type=str, default=None)
-    config_file = parser.parse_args().config
+    known, unknown = parser.parse_known_args()
+    config_file = known.config
     if config_file is not None:
         with open(config_file, 'r') as f:
             config.update(yaml.safe_load(f))

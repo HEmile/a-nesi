@@ -16,44 +16,40 @@ parameters:
   log_per_epoch:
     values: [10]
   epochs:
-    values: [13]
+    values: [10]
   batch_size:
-    values: [ 4, 8, 16, 32, 64]
+    distribution: q_log_uniform_values
+    min: 16
+    max: 256
   amt_samples:
-    values: [ 16, 64, 256, 1024 ]
+    distribution: q_log_uniform_values
+    min: 32
+    max: 4048
   K_beliefs:
-    values: [ 100, 1000 ]
+    values: [ 100 ]
   nrm_lr:
     distribution: log_uniform_values
     min: 1e-4
-    max: 1e-1
+    max: 1e-2
   perception_lr:
     distribution: log_uniform_values
     min: 1e-5
     max: 1e-2
   dirichlet_lr:
-    distribution: log_uniform_values
-    min: 1e-3
-    max: 1
+    values: [ 0.1]
   dirichlet_iters:
-    distribution: q_log_uniform_values
-    min: 1
-    max: 100
+    values: [ 0 ]
   dirichlet_init:
-    distribution: log_uniform_values
-    min: 1e-1
-    max: 10
+    values: [ 0.1 ]
   nrm_loss:
     values: [ 'mse', 'bce' ]
     probabilities: [0.3, 0.7]
   perception_loss:
-    values: [ 'log-q', 'sampled' ]
-    probabilities: [0.3, 0.7]
+    values: [ 'sampled' ]
   prune:
     values: [True]
   policy:
-    values: [ 'on' , 'both']
-    probabilities: [0.7, 0.3]
+    values: [ 'on' ]
   hidden_size:
     distribution: q_log_uniform_values
     min: 20
