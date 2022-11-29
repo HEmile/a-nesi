@@ -1,6 +1,6 @@
-N: 1
-batch_size: 64
-amt_samples: 1024
+N: 2
+batch_size: 32
+amt_samples: 100
 nrm_lr: 0.006
 perception_lr: 0.0014
 nrm_loss: 'bce'

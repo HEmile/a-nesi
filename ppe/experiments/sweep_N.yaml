@@ -1,0 +1,39 @@
+program: mnistadd.py
+project: test-project
+entity: nesy-gems
+method: grid
+parameters:
+  N:
+    values: [1, 2, 3, 4, 5, 6, 7, 8]
+  use_cuda:
+    values: [True]
+  log_per_epoch:
+    values: [10]
+  epochs:
+    values: [100]
+  batch_size:
+    values: [ 64 ]
+  amt_samples:
+    values: [ 1024 ]
+  K_beliefs:
+    values: [ 100 ]
+  nrm_lr:
+    values: [ 0.005 ]
+  perception_lr:
+    values: [ 0.0005 ]
+  dirichlet_lr:
+    values: [ 0.1]
+  dirichlet_iters:
+    values: [ 0 ]
+  dirichlet_init:
+    values: [ 0.1 ]
+  nrm_loss:
+    values: [ 'bce' ]
+  perception_loss:
+    values: [ 'sampled' ]
+  prune:
+    values: [True]
+  policy:
+    values: [ 'on' ]
+  hidden_size:
+    values: [ 500 ]

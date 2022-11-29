@@ -147,7 +147,7 @@ class MNISTAddState(StateBase):
                 # TODO: Test if this is ever nonzero
                 is_9s = 1
                 if self.N - 1 > 0:
-                    is_9s = torch.prod(torch.stack([self.oh_state[i + 1][:, 9] for i in range(self.N - 1)], -1), -1)
+                    is_9s = torch.prod(torch.stack([self.oh_state[i + 1][..., 9] for i in range(self.N - 1)], -1), -1)
                 is_19s = self.y[0] * is_9s
                 is_19s = is_19s.unsqueeze(-1)
                 return is_19s * onez_without_nine + (1 - is_19s) * onez
@@ -156,12 +156,15 @@ class MNISTAddState(StateBase):
         if kth_digit < self.N:
             # First number
             nw = 0
-            if kth_digit > 0:
-                sum_w = torch.stack([10 ** (kth_digit - i) * self.w[i] for i in range(kth_digit)], -1).sum(-1)
-                nw = sum_w.unsqueeze(-1)
             sum_y = torch.stack([10 ** (kth_digit - i + 1) * self.y[i] for i in range(kth_digit + 2)], -1).sum(-1)
             rang = torch.arange(10, device=sum_y.device).unsqueeze(0)
             ny = sum_y.unsqueeze(-1)
+            if kth_digit > 0:
+                sum_w = torch.stack([10 ** (kth_digit - i) * self.w[i] for i in range(kth_digit)], -1).sum(-1)
+                nw = sum_w.unsqueeze(-1)
+                if len(nw.shape) > len(ny.shape):
+                    ny = ny.unsqueeze(-1)
+
             first_comp = nw + rang <= ny
 
             # Note: This part is pretty confusing lol. Need to really explain this well in the paper
@@ -170,8 +173,16 @@ class MNISTAddState(StateBase):
             #  There is one more edge case. Consider y = 109. Taking the first 0, we can only have 9 to add to it,
             #  meaning the second digit has to be maximum (99), and 9 + 99 = only 108!
             #  So if the digit of y coming after the one considered is 9, _and_ y is even, we have to remove an option
-            second_comp = nw + rang >= ny - (10 ** (kth_digit + 1) -
-                                             (1 if kth_digit == self.N - 1 else (self.y[kth_digit + 2] == 9).unsqueeze(-1).int()))
+            subtr = 1
+
+            if kth_digit != self.N - 1:
+                # Computes: Are all trailing digits 9s?
+                subtr = torch.stack([(self.y[i] == 9).int() for i in range(kth_digit + 2, self.N + 1)], -1)\
+                    .prod(-1)\
+                    .unsqueeze(-1)
+                if len(subtr.shape) < len(ny.shape):
+                    subtr = subtr.unsqueeze(-1)
+            second_comp = nw + rang >= ny - (10 ** (kth_digit + 1) - subtr)
             keep = torch.logical_and(first_comp, second_comp).int()
             return keep
 

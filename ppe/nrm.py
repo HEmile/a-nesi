@@ -81,8 +81,10 @@ class NRMBase(ABC, nn.Module, Generic[ST]):
         if self.prune:
             device = _distribution.get_device() if _distribution.get_device() > 0 else 'cpu'  # HACK!!!
             mask = state.symbolic_pruner().float().to(device)
-            distribution = _distribution * mask
-            distribution = distribution / (distribution.sum(-1, keepdim=True) + 1e-8)
+            assert not (mask == 0).all(dim=-1).any()
+
+            distribution = (_distribution + 10e-15) * mask
+            distribution = distribution / (distribution.sum(-1, keepdim=True))
         else:
             distribution = _distribution
         return distribution
@@ -118,7 +120,8 @@ class NRMBase(ABC, nn.Module, Generic[ST]):
                 #  Otherwise, we first need to set the conditional (no need to have multiple samples there)
                 #  But we also only want to do this once, otherwise we get an exponential explosion of samples
                 if state.constraint == (None, None) and len(state.y) == 0 or \
-                        len(state.w) == 0 and state.constraint != (None, None) and len(state.constraint) == len(state.y):
+                        len(state.w) == 0 and state.constraint[0] != None \
+                        and state.constraint[1] == None and len(state.constraint[0]) == len(state.y):
                     n_samples = amt_samples
                 else:
                     n_samples = 1
