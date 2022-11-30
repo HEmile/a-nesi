@@ -79,8 +79,7 @@ class NRMBase(ABC, nn.Module, Generic[ST]):
         if is_binary:
             _distribution = torch.cat([_distribution, 1 - _distribution], dim=-1)
         if self.prune:
-            device = _distribution.get_device() if _distribution.get_device() > 0 else 'cpu'  # HACK!!!
-            mask = state.symbolic_pruner().float().to(device)
+            mask = state.symbolic_pruner().float()
             assert not (mask == 0).all(dim=-1).any()
 
             distribution = (_distribution + 10e-15) * mask

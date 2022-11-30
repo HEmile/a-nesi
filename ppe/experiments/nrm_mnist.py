@@ -14,7 +14,7 @@ EPS = 1E-6
 
 class NRMMnist(NRMBase[MNISTAddState]):
 
-    def __init__(self, N: int, hidden_size: int = 200, prune: bool = True, device='cpu'):
+    def __init__(self, N: int, hidden_size: int = 200, prune: bool = True):
         super().__init__(prune)
         self.N = N
 
@@ -24,10 +24,9 @@ class NRMMnist(NRMBase[MNISTAddState]):
         y_size = 1 + N * 10
 
         self.hiddens = nn.ModuleList(hidden_queries +
-                                     [nn.Linear(20 * N + y_size + i * 10, hidden_size) for i in range(2 * N)]).to(
-            device)
+                                     [nn.Linear(20 * N + y_size + i * 10, hidden_size) for i in range(2 * N)])
         self.outputs = nn.ModuleList(output_queries +
-                                     [nn.Linear(hidden_size, 10) for _ in range(2 * N)]).to(device)
+                                     [nn.Linear(hidden_size, 10) for _ in range(2 * N)])
 
     def distribution(self, state: MNISTAddState) -> torch.Tensor:
         p = state.probability_vector()  # .detach()
@@ -51,9 +50,9 @@ class MNISTAddModel(PPEBase[MNISTAddState]):
         # The NN that will model p(x) (digit classification probabilities)
         hidden_size = args["hidden_size"]
 
-        nrm = NRMMnist(self.N, hidden_size, prune=args["prune"], device=device)
+        nrm = NRMMnist(self.N, hidden_size, prune=args["prune"]).to(device)
         super().__init__(nrm,
-                         MNIST_Net(device=device),
+                         MNIST_Net().to(device),
                          amount_samples=args['amt_samples'],
                          belief_size=[10] * 2 * self.N,
                          dirichlet_lr=args['dirichlet_lr'],
@@ -78,7 +77,7 @@ class MNISTAddModel(PPEBase[MNISTAddState]):
         y_list = None
         if y is not None:
             y_list = [torch.floor(y / (10 ** (self.N - i)) % 10).long() for i in range(self.N + 1)]
-        return MNISTAddState(P, self.N, (y_list, w_list), generate_w=generate_w, device=self.device)
+        return MNISTAddState(P, self.N, (y_list, w_list), generate_w=generate_w)
 
     def symbolic_function(self, w: torch.Tensor) -> torch.Tensor:
         """

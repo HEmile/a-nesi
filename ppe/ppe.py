@@ -127,10 +127,10 @@ class PPEBase(ABC, Generic[ST]):
         log_p_w = Categorical(probs=P).log_prob(w).sum(-1)
 
         if compute_perception_loss:
-            # TODO: This might underflow
-            q_y = torch.stack(
-                result.forward_probabilities[:len(result.final_state.y)], 1
-            ).prod(-1).detach()
+            # # TODO: This might underflow
+            # q_y = torch.stack(
+            #     result.forward_probabilities[:len(result.final_state.y)], 1
+            # ).prod(-1).detach()
 
             percept_loss = -(log_p_w.mean(0)).mean()
 

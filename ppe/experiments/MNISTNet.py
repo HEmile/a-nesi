@@ -5,7 +5,7 @@ import torch.nn as nn
 
 
 class MNIST_Net(nn.Module):
-    def __init__(self, device='cpu', N=10, with_softmax=True, size=16 * 4 * 4):
+    def __init__(self, N=10, with_softmax=True, size=16 * 4 * 4):
         super(MNIST_Net, self).__init__()
         self.with_softmax = with_softmax
         self.size = size
@@ -21,14 +21,14 @@ class MNIST_Net(nn.Module):
             nn.Conv2d(6, 16, 5),  # 6 12 12 -> 16 8 8
             nn.MaxPool2d(2, 2),  # 16 8 8 -> 16 4 4
             nn.ReLU(True),
-        ).to(device)
+        )
         self.classifier = nn.Sequential(
             nn.Linear(size, 120),
             nn.ReLU(),
             nn.Linear(120, 84),
             nn.ReLU(),
             nn.Linear(84, N),
-        ).to(device)
+        )
 
     def forward(self, x):
         """

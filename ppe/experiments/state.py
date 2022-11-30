@@ -24,8 +24,7 @@ class MNISTAddState(StateBase):
                  oh_state: List[Tensor] = [],
                  expanded_pw: Optional[Tensor] = None,
                  generate_w: bool=True,
-                 final: bool = False,
-                 device='cpu'):
+                 final: bool = False):
         # Assuming probability is a b x 2*N x 10 Tensor
         # state: Contains the sampled digits
         # oh_state: Contains the one-hot encoded digits, but _also_ the one-hot encoded value of y
@@ -38,8 +37,6 @@ class MNISTAddState(StateBase):
         self.y = y
         self.w = w
         self.oh_state = oh_state
-
-        self.device = device
 
         if len(w) + len(y) != len(oh_state):
             raise ValueError("oh_state must have the same length as the w and y lists")
@@ -80,8 +77,7 @@ class MNISTAddState(StateBase):
                              oh_state,
                              self.expanded_pw,
                              generate_w=self.generate_w,
-                             final=final,
-                             device=self.device)
+                             final=final)
 
     def compute_success(self) -> torch.Tensor:
         assert self.w is not None
@@ -131,19 +127,18 @@ class MNISTAddState(StateBase):
         return self.pw.flatten(1)
 
     def symbolic_pruner(self) -> torch.Tensor:
+        device = self.pw.device
         if len(self.y) < self.N + 1:
             # Label. Rarely filters anything
             if len(self.y) == 0:
-                return torch.ones((2,)).unsqueeze(0)
-            onez = torch.ones((10,))
+                return torch.ones((2,), device=device).unsqueeze(0)
+            onez = torch.ones((10,), device=device)
             if len(self.y) == self.N:
                 onez_without_nine = torch.ones_like(onez)
                 onez_without_nine[-1] = 0
                 for i in range(len(self.y[0].shape)):
                     onez_without_nine = onez_without_nine.unsqueeze(0)
                     onez = onez.unsqueeze(0)
-                onez_without_nine = onez_without_nine.to(self.device)
-                onez = onez.to(self.device)
                 # TODO: Test if this is ever nonzero
                 is_9s = 1
                 if self.N - 1 > 0:
@@ -157,7 +152,7 @@ class MNISTAddState(StateBase):
             # First number
             nw = 0
             sum_y = torch.stack([10 ** (kth_digit - i + 1) * self.y[i] for i in range(kth_digit + 2)], -1).sum(-1)
-            rang = torch.arange(10, device=sum_y.device).unsqueeze(0)
+            rang = torch.arange(10, device=device).unsqueeze(0)
             ny = sum_y.unsqueeze(-1)
             if kth_digit > 0:
                 sum_w = torch.stack([10 ** (kth_digit - i) * self.w[i] for i in range(kth_digit)], -1).sum(-1)
