@@ -1,7 +1,7 @@
 program: mnistadd.py
 project: test-project
 entity: nesy-gems
-method: random
+method: bayes
 metric:
   name: val_accuracy
   goal: maximize
@@ -50,11 +50,11 @@ parameters:
   nrm_loss:
     values: [ 'bce' ]
   perception_loss:
-    values: [ 'log-q', 'sampled' ]
+    values: [ 'log-q']
   prune:
     values: [True]
   policy:
-    values: [ 'on', 'both']
+    values: [ 'both']
   hidden_size:
     distribution: q_log_uniform_values
     min: 200

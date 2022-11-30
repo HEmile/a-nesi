@@ -1,4 +1,5 @@
 import argparse
+import time
 
 import yaml
 from torch.utils.data import DataLoader
@@ -89,6 +90,8 @@ if __name__ == '__main__':
         cum_loss_nrm = 0
         prob_sample_train = 0
 
+        start_epoch_time = time.time()
+
         for i, batch in enumerate(train_loader):
             numb1, numb2, label = batch
 
@@ -119,6 +122,8 @@ if __name__ == '__main__':
                 cum_loss_nrm = 0
                 prob_sample_train = 0
 
+        end_epoch_time = time.time()
+
         print("----- VALIDATING -----")
         prob_sample = 0.
         for i, batch in enumerate(val_loader):
@@ -127,8 +132,13 @@ if __name__ == '__main__':
             prob_sample += model.test(x.to(device), label.to(device)).item()
 
         val_accuracy = prob_sample / len(val_loader)
-        print("Validation accuracy: ", val_accuracy)
+        epoch_time = end_epoch_time - start_epoch_time
+        test_time = time.time() - end_epoch_time
+        print("Validation accuracy: ", val_accuracy, "Epoch time: ", epoch_time, "Test time: ", test_time)
+
         wandb.log({
             # "epoch": epoch,
             "val_accuracy": val_accuracy,
+            "val_time": epoch_time,
+            "epoch_time": test_time,
         })
