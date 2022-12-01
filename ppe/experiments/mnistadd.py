@@ -51,7 +51,7 @@ if __name__ == '__main__':
             sweep_config = yaml.load(f, Loader=yaml.FullLoader)
 
         run = wandb.init(config=sweep_config)
-        config = wandb.config
+        config.update(wandb.config)
         print(config)
     else:
         name = "addition_" + str(config["N"])
@@ -80,8 +80,8 @@ if __name__ == '__main__':
 
     log_iterations = len(train_loader) // config["log_per_epoch"]
 
-    # if config["DEBUG"]:
-    #     torch.autograd.set_detect_anomaly(True)
+    if config["DEBUG"]:
+        torch.autograd.set_detect_anomaly(True)
 
     for epoch in range(config["epochs"]):
         print("----------------------------------------")
@@ -105,10 +105,15 @@ if __name__ == '__main__':
             prob_sample_train += model.test(x, label).item()
 
             if (i + 1) % log_iterations == 0:
-                avg_alpha = torch.nn.functional.softplus(model.alpha).mean().item()
+                avg_alpha = torch.nn.functional.softplus(model.alpha).mean()
+
+                log_q_weight = torch.sigmoid(avg_alpha.log()).item()
+                avg_alpha = avg_alpha.item()
+
                 print(f"actor: {cum_loss_percept / log_iterations:.4f} "
                       f"nrm: {cum_loss_nrm / log_iterations:.4f} " 
                       f"avg_alpha: {avg_alpha:.4f} ",
+                      f"log_q_weight: {log_q_weight:.4f} ",
                       f"train_accuracy: {prob_sample_train / log_iterations:.4f}")
 
                 wandb.log({
@@ -117,6 +122,7 @@ if __name__ == '__main__':
                     "nrm_loss": cum_loss_nrm / log_iterations,
                     "train_accuracy": prob_sample_train / log_iterations,
                     "avg_alpha": avg_alpha,
+                    "log_q_weight": log_q_weight,
                 })
                 cum_loss_percept = 0
                 cum_loss_nrm = 0

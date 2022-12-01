@@ -2,7 +2,7 @@ from abc import ABC, abstractmethod
 from typing import Generic, List, Tuple, Optional
 import torch
 from torch import nn
-from torch.nn.functional import one_hot
+from torch.nn.functional import one_hot, softplus
 
 from nrm import NRMBase, ST, NRMResult
 from fit_dirichlet import fit_dirichlet
@@ -36,7 +36,7 @@ class PPEBase(ABC, Generic[ST]):
         :param initial_concentration: The initial concentration of the Dirichlet distribution
         :param K_beliefs: The amount of beliefs to keep to fit the Dirichlet
         """
-        assert perception_loss in ['sampled', 'log-q']
+        assert perception_loss in ['sampled', 'log-q', 'both']
         assert nrm_loss in ['mse', 'bce']
         assert policy in ['both', 'off', 'on']
         self.nrm = nrm
@@ -73,13 +73,12 @@ class PPEBase(ABC, Generic[ST]):
 
         return self.nrm(initial_state, amt_samples=self.amount_samples)
 
-    def off_policy_loss(self, beliefs: torch.Tensor) -> torch.Tensor:
+    def off_policy_loss(self, p_P: torch.Tensor) -> torch.Tensor:
         """
         Algorithm 2
         For now assumes all w_i are the same size
         """
-        beliefs = beliefs.detach()
-        p_P = fit_dirichlet(beliefs, self.alpha, self.dirichlet_lr, self.dirichlet_iters)
+
         P = p_P.sample((self.amount_samples,))
         p_w = Categorical(probs=P)
         # (batch, |W|)
@@ -160,7 +159,8 @@ class PPEBase(ABC, Generic[ST]):
         P = self.perception(x)
         self.nrm_optimizer.zero_grad()
         nrm_loss = 0.
-        if not self.policy == 'on':
+        use_off_policy_loss = not self.policy == 'on'
+        if use_off_policy_loss or self.perception_loss == 'both':
             if self.beliefs is None:
                 self.beliefs = P
             else:
@@ -168,33 +168,42 @@ class PPEBase(ABC, Generic[ST]):
                 if self.beliefs.shape[0] > self.K_beliefs:
                     self.beliefs = self.beliefs[-self.K_beliefs:]
 
-            _nrm_loss = self.off_policy_loss(self.beliefs)
-            _nrm_loss.backward()
-            nrm_loss += _nrm_loss
-            self.nrm_optimizer.step()
-            self.nrm_optimizer.zero_grad()
+            beliefs = self.beliefs.detach()
+            p_P = fit_dirichlet(beliefs, self.alpha, self.dirichlet_lr, self.dirichlet_iters)
 
-        self.perception_optimizer.zero_grad()
-
-        use_sampled_loss = self.perception_loss == 'sampled'
-        use_on_policy_loss = not self.policy == 'off'
-
-        if use_sampled_loss or use_on_policy_loss:
-            loss_percept, _nrm_loss = self.sampled_loss(P, y, use_sampled_loss, use_on_policy_loss)
-            if use_sampled_loss and use_on_policy_loss:
-                (loss_percept + _nrm_loss).backward()
-                nrm_loss += _nrm_loss
-                self.nrm_optimizer.step()
-            elif use_sampled_loss:
-                loss_percept.backward()
-            elif use_on_policy_loss:
+            if use_off_policy_loss:
+                _nrm_loss = self.off_policy_loss(p_P)
                 _nrm_loss.backward()
                 nrm_loss += _nrm_loss
                 self.nrm_optimizer.step()
-        if self.perception_loss == 'log-q':
-            loss_percept = self.log_q_loss(P, y)
-            loss_percept.backward()
+                self.nrm_optimizer.zero_grad()
 
+        use_sampled_loss = not self.perception_loss == 'log-q'
+        use_log_q_loss = not self.perception_loss == 'sampled'
+        use_on_policy_loss = not self.policy == 'off'
+
+        loss_sampled = 0.
+        loss_log_q = 0.
+
+        self.perception_optimizer.zero_grad()
+        if use_sampled_loss or use_on_policy_loss:
+            _loss_sampled, _nrm_loss = self.sampled_loss(P, y, use_sampled_loss, use_on_policy_loss)
+            if use_sampled_loss:
+                loss_sampled = _loss_sampled
+            if use_on_policy_loss:
+                _nrm_loss.backward()
+                nrm_loss += _nrm_loss
+                self.nrm_optimizer.step()
+        if use_log_q_loss:
+            loss_log_q = self.log_q_loss(P, y)
+
+        w_sampled = 1. if use_sampled_loss else 0.
+        w_log_q = 1. if use_log_q_loss else 0.
+        if self.perception_loss == 'both':
+            w_log_q = torch.sigmoid(torch.log(softplus(self.alpha.mean()))).detach()
+            w_sampled = 1. - w_log_q
+        loss_percept = w_sampled * loss_sampled + w_log_q * loss_log_q
+        loss_percept.backward()
         self.perception_optimizer.step()
 
         return nrm_loss, loss_percept

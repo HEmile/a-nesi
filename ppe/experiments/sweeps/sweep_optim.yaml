@@ -11,10 +11,6 @@ early_terminate:
 parameters:
   N:
     values: [1]
-  use_cuda:
-    values: [True]
-  log_per_epoch:
-    values: [10]
   epochs:
     values: [10]
   batch_size:
