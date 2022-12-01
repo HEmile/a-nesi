@@ -1,0 +1,14 @@
+N: 1
+batch_size: 16
+amt_samples: 16
+nrm_lr: 0.005
+perception_lr: 0.0005
+nrm_loss: 'bce'
+perception_loss: 'both'
+policy: 'on'
+hidden_size: 450
+K_beliefs: 1000
+dirichlet_lr: 0.003
+dirichlet_iters: 10
+dirichlet_init: 1
+DEBUG: True

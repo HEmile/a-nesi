@@ -5,10 +5,6 @@ method: grid
 parameters:
   N:
     values: [1, 2, 3, 4, 5]
-  use_cuda:
-    values: [True]
-  log_per_epoch:
-    values: [10]
   epochs:
     values: [100]
   batch_size:
