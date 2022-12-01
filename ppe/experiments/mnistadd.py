@@ -47,7 +47,7 @@ if __name__ == '__main__':
         print(config)
     elif SWEEP:
         # TODO: I don't get how it's supposed to know what yaml file to open here.
-        with open("./sweep.yaml", 'r') as f:
+        with open("sweeps/sweep.yaml", 'r') as f:
             sweep_config = yaml.load(f, Loader=yaml.FullLoader)
 
         run = wandb.init(config=sweep_config)
@@ -139,6 +139,6 @@ if __name__ == '__main__':
         wandb.log({
             # "epoch": epoch,
             "val_accuracy": val_accuracy,
-            "val_time": epoch_time,
-            "epoch_time": test_time,
+            "val_time": test_time,
+            "epoch_time": epoch_time,
         })
