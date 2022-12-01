@@ -2,7 +2,7 @@ from abc import ABC, abstractmethod
 from typing import Generic, List, Tuple, Optional
 import torch
 from torch import nn
-from torch.nn.functional import one_hot
+from torch.nn.functional import one_hot, softplus
 
 from nrm import NRMBase, ST, NRMResult
 from fit_dirichlet import fit_dirichlet
@@ -200,7 +200,7 @@ class PPEBase(ABC, Generic[ST]):
         w_sampled = 1. if use_sampled_loss else 0.
         w_log_q = 1. if use_log_q_loss else 0.
         if self.perception_loss == 'both':
-            w_log_q = torch.sigmoid(torch.log(self.alpha.mean())).detach()
+            w_log_q = torch.sigmoid(torch.log(softplus(self.alpha.mean()))).detach()
             w_sampled = 1. - w_log_q
         loss_percept = w_sampled * loss_sampled + w_log_q * loss_log_q
         loss_percept.backward()

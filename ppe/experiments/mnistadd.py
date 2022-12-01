@@ -51,7 +51,7 @@ if __name__ == '__main__':
             sweep_config = yaml.load(f, Loader=yaml.FullLoader)
 
         run = wandb.init(config=sweep_config)
-        config = wandb.config
+        config.update(wandb.config)
         print(config)
     else:
         name = "addition_" + str(config["N"])
@@ -80,8 +80,8 @@ if __name__ == '__main__':
 
     log_iterations = len(train_loader) // config["log_per_epoch"]
 
-    # if config["DEBUG"]:
-    #     torch.autograd.set_detect_anomaly(True)
+    if config["DEBUG"]:
+        torch.autograd.set_detect_anomaly(True)
 
     for epoch in range(config["epochs"]):
         print("----------------------------------------")
