@@ -155,7 +155,10 @@ class NRMBase(ABC, nn.Module, Generic[ST]):
         forward_probabilities = []
 
         state = initial_state
+        first_iteration = True
         while not state.final:
+            # If first time: [batch, amt_actions]
+            # Otherwise: [batch, max(beam_size), amt_actions]
             distribution = self._compute_distribution(state)
 
             state = state.next_state(action)

@@ -64,6 +64,7 @@ class MNISTAddModel(PPEBase[MNISTAddState]):
                          policy=args['policy'],
                          perception_lr=args['perception_lr'],
                          perception_loss=args['perception_loss'],
+                         percept_loss_pref=args['percept_loss_pref'],
                          device=device)
 
     def initial_state(self,

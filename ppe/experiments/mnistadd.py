@@ -22,6 +22,7 @@ if __name__ == '__main__':
         "policy": "both",
         "perception_lr": 1e-3,
         "perception_loss": "log-q",
+        "percept_loss_pref": 1.,
         "epochs": 30,
         "log_per_epoch": 10,
         "hidden_size": 200,
@@ -107,7 +108,7 @@ if __name__ == '__main__':
             if (i + 1) % log_iterations == 0:
                 avg_alpha = torch.nn.functional.softplus(model.alpha).mean()
 
-                log_q_weight = torch.sigmoid(avg_alpha.log()).item()
+                log_q_weight = torch.sigmoid((config['percept_loss_pref'] * avg_alpha).log()).item()
                 avg_alpha = avg_alpha.item()
 
                 print(f"actor: {cum_loss_percept / log_iterations:.4f} "

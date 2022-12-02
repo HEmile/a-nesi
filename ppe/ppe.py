@@ -27,6 +27,7 @@ class PPEBase(ABC, Generic[ST]):
                  policy: str = "both",
                  perception_lr=1e-3,
                  perception_loss='sampled',
+                 percept_loss_pref=1.0,
                  device='cpu',
                  ):
         """
@@ -35,6 +36,7 @@ class PPEBase(ABC, Generic[ST]):
         :param amount_samples: The amount of samples to draw to train the NRM
         :param initial_concentration: The initial concentration of the Dirichlet distribution
         :param K_beliefs: The amount of beliefs to keep to fit the Dirichlet
+        :param percept_loss_pref: When using perception_loss='both', this will prefer log-q if > 1.0, otherwise sampled
         """
         assert perception_loss in ['sampled', 'log-q', 'both']
         assert nrm_loss in ['mse', 'bce']
@@ -49,6 +51,7 @@ class PPEBase(ABC, Generic[ST]):
         self.nrm_loss = nrm_loss
         self.policy = policy
         self.perception_loss = perception_loss
+        self.percept_loss_pref = percept_loss_pref
 
         # We're training these two models separately, so let's also use two different optimizers.
         #  This ensures we won't accidentally update the wrong model.
@@ -59,7 +62,7 @@ class PPEBase(ABC, Generic[ST]):
         self.alpha.requires_grad = True
         self.beliefs = None
 
-    def sample(self, x: torch.Tensor, P: Optional[torch.Tensor] = None) -> ST:
+    def sample(self, x: torch.Tensor, P: Optional[torch.Tensor] = None, beam=False) -> ST:
         """
         Algorithm 1
         Sample from the PPE model
@@ -71,7 +74,9 @@ class PPEBase(ABC, Generic[ST]):
 
         initial_state = self.initial_state(P)
 
-        return self.nrm(initial_state, amt_samples=self.amount_samples)
+        if not beam:
+            return self.nrm(initial_state, amt_samples=self.amount_samples)
+        return self.nrm.beam(initial_state, beam_size=self.amount_samples)
 
     def off_policy_loss(self, p_P: torch.Tensor) -> torch.Tensor:
         """
@@ -200,7 +205,7 @@ class PPEBase(ABC, Generic[ST]):
         w_sampled = 1. if use_sampled_loss else 0.
         w_log_q = 1. if use_log_q_loss else 0.
         if self.perception_loss == 'both':
-            w_log_q = torch.sigmoid(torch.log(softplus(self.alpha.mean()))).detach()
+            w_log_q = torch.sigmoid(torch.log(self.percept_loss_pref * softplus(self.alpha.mean()))).detach()
             w_sampled = 1. - w_log_q
         loss_percept = w_sampled * loss_sampled + w_log_q * loss_log_q
         loss_percept.backward()
@@ -209,7 +214,7 @@ class PPEBase(ABC, Generic[ST]):
         return nrm_loss, loss_percept
 
     def test(self, x: torch.Tensor, y: torch.Tensor) -> torch.Tensor:
-        result = self.sample(x)
+        result = self.sample(x, beam=False)
         successes = self.success(result, y).float()
         return torch.mean(successes)
 
