@@ -160,7 +160,7 @@ if __name__ == '__main__':
             numb1, numb2, label, label_digits = batch
             x = torch.cat([numb1, numb2], dim=1)
 
-            test_result = test(x, label, label_digits, model, device)
+            test_result = test(x.to(device), label.to(device), label_digits, model, device)
             val_acc += test_result[0]
             val_explain_acc += test_result[1]
             val_digit_acc += test_result[2]

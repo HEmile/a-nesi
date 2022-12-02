@@ -5,6 +5,8 @@ method: grid
 parameters:
   N:
     values: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
+  runs:
+    values: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
   epochs:
     values: [100]
   batch_size:
@@ -14,15 +16,17 @@ parameters:
   K_beliefs:
     values: [ 100 ]
   nrm_lr:
-    values: [ 0.0012 ]
+    values: [ 0.003 ]
   perception_lr:
-    values: [ 0.0012 ]
+    values: [ 0.003 ]
   dirichlet_lr:
     values: [ 0.003]
   dirichlet_iters:
-    values: [ 10 ]
+    values: [ 40 ]
   dirichlet_init:
-    values: [ 1.0 ]
+    values: [ 0.1 ]
+  dirichlet_L2:
+    values: [ 33000 ]
   nrm_loss:
     values: [ 'bce' ]
   perception_loss:
@@ -30,4 +34,4 @@ parameters:
   policy:
     values: [ 'both' ]
   hidden_size:
-    values: [ 1000 ]
+    values: [ 500 ]

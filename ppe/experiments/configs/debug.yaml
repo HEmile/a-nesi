@@ -1,4 +1,4 @@
-N: 1
+N: 4
 batch_size: 16
 amt_samples: 50
 nrm_lr: 0.0012
@@ -13,4 +13,9 @@ dirichlet_lr: 0.003
 dirichlet_iters: 10
 dirichlet_init: 0.01
 dirichlet_L2: 1000
+<<<<<<< Updated upstream
 DEBUG: True
+=======
+DEBUG: True
+test: False
+>>>>>>> Stashed changes
