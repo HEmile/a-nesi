@@ -23,6 +23,7 @@ if __name__ == '__main__':
         "use_cuda": True,
         "DEBUG": False,
         "N": 1,
+        "test": False,
         "batch_size": 256,
         "amt_samples": 100,
         "nrm_lr": 1e-3,
@@ -79,8 +80,12 @@ if __name__ == '__main__':
     use_cuda = config["use_cuda"] and torch.cuda.is_available()
     device = torch.device('cuda' if use_cuda else 'cpu')
 
-    train_set = addition(config["N"], "train")
-    val_set = addition(config["N"], "val")
+    if config["test"]:
+        train_set = addition(config["N"], "full_train")
+        val_set = addition(config["N"], "test")
+    else:
+        train_set = addition(config["N"], "train")
+        val_set = addition(config["N"], "val")
     # test_set = addition(config["N"], "test")
 
     model = MNISTAddModel(config, device=device)
@@ -152,7 +157,10 @@ if __name__ == '__main__':
 
         end_epoch_time = time.time()
 
-        print("----- VALIDATING -----")
+        if config['test']:
+            print("----- TESTING -----")
+        else:
+            print("----- VALIDATING -----")
         val_acc = 0.
         val_explain_acc = 0.
         val_digit_acc = 0.
@@ -170,14 +178,18 @@ if __name__ == '__main__':
         val_digit_accuracy = val_digit_acc / len(val_loader)
         epoch_time = end_epoch_time - start_epoch_time
         test_time = time.time() - end_epoch_time
-        print("Validation accuracy: ", val_accuracy, "Val Explain: ", val_explain_accuracy,
-              "Val Digit: ", val_digit_accuracy, "Epoch time: ", epoch_time, "Test time: ", test_time)
 
+        prefix = 'Test' if config['test'] else 'Val'
+
+        print(f"{prefix} accuracy: {val_accuracy} {prefix} Explain: {val_explain_accuracy}",
+              f"{prefix} Digit: {val_digit_accuracy} Epoch time: {epoch_time} {prefix} time: {test_time}")
+
+        wdb_prefix = 'test' if config['test'] else 'val'
         wandb.log({
             # "epoch": epoch,
-            "val_accuracy": val_accuracy,
-            "val_explain_accuracy": val_explain_accuracy,
-            "val_digit_accuracy": val_digit_accuracy,
-            "val_time": test_time,
+            f"{wdb_prefix}_accuracy": val_accuracy,
+            f"{wdb_prefix}_explain_accuracy": val_explain_accuracy,
+            f"{wdb_prefix}_digit_accuracy": val_digit_accuracy,
+            f"{wdb_prefix}_time": test_time,
             "epoch_time": epoch_time,
         })
