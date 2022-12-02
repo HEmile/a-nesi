@@ -30,6 +30,7 @@ _train_set, _val_set = random_split(_full_train_set, [50000, 10000])
 datasets = {
     "train": _train_set,
     "val": _val_set,
+    "full_train": _full_train_set,
     "test": torchvision.datasets.MNIST(
         root=str(_DATA_ROOT), train=False, download=True, transform=transform
     ),

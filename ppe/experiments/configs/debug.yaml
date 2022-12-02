@@ -5,7 +5,7 @@ nrm_lr: 0.0012
 perception_lr: 0.0012
 nrm_loss: 'bce'
 perception_loss: 'both'
-percept_loss_pref: 10
+percept_loss_pref: 1
 policy: 'both'
 hidden_size: 450
 K_beliefs: 100
@@ -13,9 +13,5 @@ dirichlet_lr: 0.003
 dirichlet_iters: 10
 dirichlet_init: 0.01
 dirichlet_L2: 1000
-<<<<<<< Updated upstream
-DEBUG: True
-=======
 DEBUG: True
 test: False
->>>>>>> Stashed changes
