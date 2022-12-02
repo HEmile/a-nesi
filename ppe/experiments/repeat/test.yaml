@@ -26,12 +26,16 @@ parameters:
   dirichlet_init:
     values: [ 0.1 ]
   dirichlet_L2:
-    values: [ 33000 ]
+    values: [ 60000 ]
   nrm_loss:
     values: [ 'bce' ]
   perception_loss:
     values: [ 'both' ]
+  percept_loss_pref:
+    values: [ 1 ]
   policy:
     values: [ 'both' ]
   hidden_size:
     values: [ 500 ]
+  test:
+    values: [ True ]
