@@ -32,6 +32,7 @@ if __name__ == '__main__':
         "dirichlet_init": 1,
         "dirichlet_lr": 0.1,
         "dirichlet_iters": 10,
+        "dirichlet_L2": 0.0,
         "K_beliefs": 100,
     }
 

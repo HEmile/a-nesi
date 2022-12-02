@@ -43,6 +43,10 @@ parameters:
     distribution: log_uniform_values
     min: 1e-3
     max: 1
+  dirichlet_L2:
+    distribution: log_uniform_values
+    min: 1e-2
+    max: 100000
   nrm_loss:
     values: [ 'bce' ]
   perception_loss:

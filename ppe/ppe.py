@@ -21,6 +21,7 @@ class PPEBase(ABC, Generic[ST]):
                  initial_concentration: float = 500,
                  dirichlet_iters: int = 50,
                  dirichlet_lr: float = 1.0,
+                 dirichlet_L2: float = 0.0,
                  K_beliefs: int = 100,
                  nrm_lr=1e-3,
                  nrm_loss="mse",
@@ -48,6 +49,7 @@ class PPEBase(ABC, Generic[ST]):
         self.K_beliefs = K_beliefs
         self.dirichlet_iters = dirichlet_iters
         self.dirichlet_lr = dirichlet_lr
+        self.dirichlet_L2 = dirichlet_L2
         self.nrm_loss = nrm_loss
         self.policy = policy
         self.perception_loss = perception_loss
@@ -174,7 +176,7 @@ class PPEBase(ABC, Generic[ST]):
                     self.beliefs = self.beliefs[-self.K_beliefs:]
 
             beliefs = self.beliefs.detach()
-            p_P = fit_dirichlet(beliefs, self.alpha, self.dirichlet_lr, self.dirichlet_iters)
+            p_P = fit_dirichlet(beliefs, self.alpha, self.dirichlet_lr, self.dirichlet_iters, self.dirichlet_L2)
 
             if use_off_policy_loss:
                 _nrm_loss = self.off_policy_loss(p_P)

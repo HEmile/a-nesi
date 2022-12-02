@@ -3,7 +3,17 @@ from torch.distributions import Dirichlet
 from torch.nn.functional import softplus
 
 
-def fit_dirichlet(beliefs: torch.Tensor, alpha: torch.Tensor, lr=1, iters=1000) -> Dirichlet:
+def fit_dirichlet(beliefs: torch.Tensor, alpha: torch.Tensor, lr=1, iters=1000, L2=0.0) -> Dirichlet:
+    """
+    Fit a Dirichlet distribution to the beliefs.
+    :param beliefs: Tensor of shape (K, |W|, n) where K is the number of beliefs, |W| is number of elements in a world
+     and n is the number of classes.
+    :param alpha: Tensor of shape (|W|, n) of the prior.
+    :param lr: Learning rate for alpha
+    :param iters: Number of iterations to optimize log-probability of Dirichlet
+    :param L2: L2 regularization on alpha. If 0, no regularization. If > 0, this will prefer lower values of alpha.
+     This is used to prevent the Dirichlet distribution from becoming too peaked on the uniform distribution over classes
+    """
     a = softplus(alpha)
     data = beliefs
     N = data.shape[0]
@@ -21,7 +31,7 @@ def fit_dirichlet(beliefs: torch.Tensor, alpha: torch.Tensor, lr=1, iters=1000) 
         log_p = log_p * N
         optimizer.zero_grad()
 
-        loss = -log_p.mean()
+        loss = -log_p.mean() + L2 * (a ** 2).mean()
 
         loss.backward(retain_graph=True)
         optimizer.step()

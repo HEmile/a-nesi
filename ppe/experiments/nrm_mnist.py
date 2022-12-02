@@ -58,6 +58,7 @@ class MNISTAddModel(PPEBase[MNISTAddState]):
                          dirichlet_lr=args['dirichlet_lr'],
                          dirichlet_iters=args['dirichlet_iters'],
                          initial_concentration=args['dirichlet_init'],
+                         dirichlet_L2=args['dirichlet_L2'],
                          K_beliefs=args['K_beliefs'],
                          nrm_lr=args['nrm_lr'],
                          nrm_loss=args['nrm_loss'],
