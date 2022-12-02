@@ -1,4 +1,6 @@
 from __future__ import annotations
+
+import math
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from typing import Tuple, List, Generic, TypeVar, Callable, Optional
@@ -148,37 +150,52 @@ class NRMBase(ABC, nn.Module, Generic[ST]):
         return NRMResult(final_state, forward_probabilities, action, s_dist)
 
     def beam(self, initial_state: ST, beam_size: int):
-        # sampler: If None, this samples in proportion to the flow.
-        # Otherwise, this should be a function that takes the flow, the distribution, the number of samples, and the state, and returns a sample
-
-        # Sample (hopefully) positive worlds to estimate gradients
+        """
+        Beam search on the NRM model given initial state
+        """
+        # List of [batch, beam_size]
         forward_probabilities = []
 
         state = initial_state
         first_iteration = True
         while not state.final:
-            # If first time: [batch, amt_actions]
-            # Otherwise: [batch, max(beam_size), amt_actions]
             distribution = self._compute_distribution(state)
 
-            state = state.next_state(action)
+            if first_iteration:
+                # [batch, amt_actions]
+                k = min(beam_size, distribution.shape[-1])
+                probs, action = torch.topk(distribution, k, dim=-1)
+                forward_probabilities.append(probs)
+                state = state.next_state(action)
+                first_iteration = False
+            else:
+                # distribution: [batch, cur_beam_size, amt_actions]
+                log_probs = torch.stack(forward_probabilities, dim=-1).log().sum(-1)
+                log_probs = log_probs.unsqueeze(-1) + distribution.log()
 
-            shld_unsqueeze = len(action.shape) < len(distribution.shape)
-            if shld_unsqueeze:
-                action = action.unsqueeze(-1)
+                # [batch, cur_beam_size * amt_actions]
+                log_probs = log_probs.reshape(log_probs.shape[0], -1)
+                # Define how many actions we pick. If we have less than the beam size, we pick all of them.
+                #  However, some actions will have probability 0 (symbolic pruner), so we need to filter those out.
+                #  Those will be at the bottom of the ordering, so we just need to restrict the size of k
+                k = min(beam_size, log_probs.shape[-1] - torch.isinf(log_probs).sum(-1).max().item())
+                # [batch, k]
+                _, action_flat = torch.topk(log_probs, k, dim=-1)
 
-            s_dist = distribution.gather(-1, action)
+                prev_action = action_flat // distribution.shape[-1]
+                action = action_flat % distribution.shape[-1]
 
-            if shld_unsqueeze:
-                action = action.squeeze(-1)
-            if len(s_dist) > 2:
-                s_dist = s_dist.squeeze(-1)
-            forward_probabilities.append(s_dist)
+                for i in range(len(forward_probabilities)):
+                    forward_probabilities[i] = forward_probabilities[i].gather(-1, prev_action)
+                dist_flat = distribution.reshape(distribution.shape[0], -1)
+                forward_probabilities.append(dist_flat.gather(-1, action_flat))
+
+                state = state.next_state(action, prev_action)
 
             if not state.generate_w and state.finished_generating_y():
                 break
         final_state = state
-        return NRMResult(final_state, forward_probabilities, action, s_dist)
+        return NRMResult(final_state, forward_probabilities, action, distribution)
 
     def regular_sampler(self, distribution: torch.Tensor, amt_samples: int,
                         state: ST) -> torch.Tensor:

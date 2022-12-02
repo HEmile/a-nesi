@@ -216,7 +216,7 @@ class PPEBase(ABC, Generic[ST]):
         return nrm_loss, loss_percept
 
     def test(self, x: torch.Tensor, y: torch.Tensor) -> torch.Tensor:
-        result = self.sample(x, beam=False)
+        result = self.sample(x, beam=True)
         successes = self.success(result, y).float()
         return torch.mean(successes)
 
