@@ -64,22 +64,6 @@ class PPEBase(ABC, Generic[ST]):
         self.alpha.requires_grad = True
         self.beliefs = None
 
-    def sample(self, x: torch.Tensor, P: Optional[torch.Tensor] = None, beam=False) -> ST:
-        """
-        Algorithm 1
-        Sample from the PPE model
-        :param data: The data to sample from
-        :return: A sample from the PPE model
-        """
-        if P is None:
-            P = self.perception(x)
-
-        initial_state = self.initial_state(P)
-
-        if not beam:
-            return self.nrm(initial_state, amt_samples=self.amount_samples)
-        return self.nrm.beam(initial_state, beam_size=self.amount_samples)
-
     def off_policy_loss(self, p_P: torch.Tensor) -> torch.Tensor:
         """
         Algorithm 2
@@ -215,10 +199,31 @@ class PPEBase(ABC, Generic[ST]):
 
         return nrm_loss, loss_percept
 
-    def test(self, x: torch.Tensor, y: torch.Tensor) -> torch.Tensor:
-        result = self.sample(x, beam=True)
+    def test(self, x: torch.Tensor, y: torch.Tensor, true_w: Optional[List[torch.Tensor]] = None
+             ) -> Tuple[torch.Tensor, Optional[torch.Tensor], Optional[torch.Tensor]]:
+        """
+        Algorithm 1
+        Sample from the PPE model
+        :param x: The data to perform beam search on
+        :param y: The true label y to predict and compare to
+        :param true_w: The true w (explanation to get to y). Used to evaluate if explanations are correct
+        """
+        P = self.perception(x)
+        initial_state = self.initial_state(P)
+        result: NRMResult[ST] = self.nrm.beam(initial_state, beam_size=self.amount_samples)
         successes = self.success(result, y, beam=True).float()
-        return torch.mean(successes)
+        if true_w is not None:
+            explain_acc = 0.
+            for i in range(len(true_w)):
+                # Get beam search prediction of w, compare to ground truth w
+                explain_acc += (result.final_state.w[i][:, 0] == true_w[i]).float().mean()
+            explain_acc /= len(true_w)
+
+            prior_predictions = torch.argmax(P, dim=-1)
+            prior_acc = (prior_predictions == torch.stack(true_w, 1)).float().mean()
+
+            return torch.mean(successes), explain_acc, prior_acc
+        return torch.mean(successes), None, None
 
     @abstractmethod
     def initial_state(self, P: torch.Tensor, y: Optional[torch.Tensor] = None, w: Optional[torch.Tensor] = None,

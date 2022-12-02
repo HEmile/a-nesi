@@ -10,6 +10,14 @@ import wandb
 
 SWEEP = True
 
+def test(x, label, label_digits, model, device):
+    label_digits = list(map(lambda d: d.to(device), label_digits[0] + label_digits[1]))
+    test_result = model.test(x, label, label_digits)
+    acc = test_result[0].item()
+    explain_acc = test_result[1].item()
+    digit_acc = test_result[2].item()
+    return acc, explain_acc, digit_acc
+
 if __name__ == '__main__':
     config = {
         "use_cuda": True,
@@ -90,12 +98,15 @@ if __name__ == '__main__':
         print("NEW EPOCH", epoch)
         cum_loss_percept = 0
         cum_loss_nrm = 0
-        prob_sample_train = 0
+        train_acc = 0
+        train_explain_acc = 0
+        train_digit_acc = 0
 
         start_epoch_time = time.time()
 
         for i, batch in enumerate(train_loader):
-            numb1, numb2, label = batch
+            # label_digits is ONLY EVER to be used during testing!!!
+            numb1, numb2, label, label_digits = batch
 
             x = torch.cat([numb1, numb2], dim=1).to(device)
             label = label.to(device)
@@ -104,7 +115,10 @@ if __name__ == '__main__':
             cum_loss_percept += loss_percept.item()
             cum_loss_nrm += loss_nrm.item()
 
-            prob_sample_train += model.test(x, label).item()
+            test_result = test(x, label, label_digits, model, device)
+            train_acc += test_result[0]
+            train_explain_acc += test_result[1]
+            train_digit_acc += test_result[2]
 
             if (i + 1) % log_iterations == 0:
                 avg_alpha = torch.nn.functional.softplus(model.alpha).mean()
@@ -116,37 +130,54 @@ if __name__ == '__main__':
                       f"nrm: {cum_loss_nrm / log_iterations:.4f} " 
                       f"avg_alpha: {avg_alpha:.4f} ",
                       f"log_q_weight: {log_q_weight:.4f} ",
-                      f"train_accuracy: {prob_sample_train / log_iterations:.4f}")
+                      f"train_acc: {train_acc / log_iterations:.4f}",
+                      f"train_explain_acc: {train_explain_acc / log_iterations:.4f}",
+                      f"train_digit_acc: {train_digit_acc / log_iterations:.4f}")
 
                 wandb.log({
                     # "epoch": epoch,
                     "percept_loss": cum_loss_percept / log_iterations,
                     "nrm_loss": cum_loss_nrm / log_iterations,
-                    "train_accuracy": prob_sample_train / log_iterations,
+                    "train_accuracy": train_acc / log_iterations,
+                    "train_explain_accuracy": train_explain_acc / log_iterations,
+                    "train_digit_accuracy": train_digit_acc / log_iterations,
                     "avg_alpha": avg_alpha,
                     "log_q_weight": log_q_weight,
                 })
                 cum_loss_percept = 0
                 cum_loss_nrm = 0
-                prob_sample_train = 0
+                train_acc = 0
+                train_explain_acc = 0
+                train_digit_acc = 0
 
         end_epoch_time = time.time()
 
         print("----- VALIDATING -----")
-        prob_sample = 0.
+        val_acc = 0.
+        val_explain_acc = 0.
+        val_digit_acc = 0.
         for i, batch in enumerate(val_loader):
-            numb1, numb2, label = batch
+            numb1, numb2, label, label_digits = batch
             x = torch.cat([numb1, numb2], dim=1)
-            prob_sample += model.test(x.to(device), label.to(device)).item()
 
-        val_accuracy = prob_sample / len(val_loader)
+            test_result = test(x, label, label_digits, model, device)
+            val_acc += test_result[0]
+            val_explain_acc += test_result[1]
+            val_digit_acc += test_result[2]
+
+        val_accuracy = val_acc / len(val_loader)
+        val_explain_accuracy = val_explain_acc / len(val_loader)
+        val_digit_accuracy = val_digit_acc / len(val_loader)
         epoch_time = end_epoch_time - start_epoch_time
         test_time = time.time() - end_epoch_time
-        print("Validation accuracy: ", val_accuracy, "Epoch time: ", epoch_time, "Test time: ", test_time)
+        print("Validation accuracy: ", val_accuracy, "Val Explain: ", val_explain_accuracy,
+              "Val Digit: ", val_digit_accuracy, "Epoch time: ", epoch_time, "Test time: ", test_time)
 
         wandb.log({
             # "epoch": epoch,
             "val_accuracy": val_accuracy,
+            "val_explain_accuracy": val_explain_accuracy,
+            "val_digit_accuracy": val_digit_accuracy,
             "val_time": test_time,
             "epoch_time": epoch_time,
         })

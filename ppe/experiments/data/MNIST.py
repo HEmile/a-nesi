@@ -57,12 +57,12 @@ def addition(n: int, dataset: str, seed=None):
 
 
 class MNISTOperator(TorchDataset):
-    def __getitem__(self, index: int) -> Tuple[np.array, np.array, int]:
+    def __getitem__(self, index: int) -> Tuple[np.array, np.array, int, List[int]]:
         l1, l2 = self.data[index]
-        label = self._get_label(index)
+        label, digits = self._get_label(index)
         l1 = torch.stack([self.dataset[x][0][0] for x in l1])
         l2 = torch.stack([self.dataset[x][0][0] for x in l2])
-        return l1, l2, label
+        return l1, l2, label, digits
 
     def __init__(
         self,
@@ -128,13 +128,14 @@ class MNISTOperator(TorchDataset):
 
     def _get_label(self, i: int):
         mnist_indices = self.data[i]
+        digits = [[self.dataset[j][1] for j in i] for i in mnist_indices]
         # Figure out what the ground truth is, first map each parameter to the value:
         ground_truth = [
-            digits_to_number(self.dataset[j][1] for j in i) for i in mnist_indices
+            digits_to_number(di) for di in digits
         ]
         # Then compute the expected value:
         expected_result = self.operator(ground_truth)
-        return expected_result
+        return expected_result, digits
 
     def __len__(self):
         return len(self.data)
