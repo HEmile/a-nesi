@@ -1,3 +1,6 @@
+wandb/
+ppe/ppe.egg-info
+
 ## Core latex/pdflatex auxiliary files:
 *.aux
 *.lof
@@ -240,21 +243,8 @@ data/MNIST/MNIST/raw/
 data/MNIST/processed/
 data/MNIST/raw/
 sdd/
-src/deepproblog/data/FB15k/
-src/deepproblog/examples/CLUTRR/data/data_06b8f2a1/
-src/deepproblog/examples/CLUTRR/data/data_089907f8/
-src/deepproblog/examples/CLUTRR/data/data_523348e6/
-src/deepproblog/examples/CLUTRR/data/data_7c5b0e70/
-src/deepproblog/examples/CLUTRR/data/data_d83ecc3e/
-src/deepproblog/examples/CLUTRR/data/data_db9b8f04/
-src/deepproblog/examples/Coins/data/image_data/
-src/deepproblog/examples/CoinUrn/data/image_data/
-src/deepproblog/examples/CoinUrn/data/train_10000/
-src/deepproblog/examples/MNIST/data/MNIST
-src/deepproblog/examples/MNIST/log/
-src/deepproblog/examples/Poker/cache/
-src/deepproblog/examples/Poker/data/cards/rendered/
-src/deepproblog/examples/Poker/data/images/
-src/deepproblog/examples/Smokers/data/
-src/deepproblog/examples/Successor/data/MNIST/
 /venv/
+ppe/experiments/wandb/
+ppe/experiments/data/
+ppe/ppe.egg-info/
+src/gflownet/experiments/

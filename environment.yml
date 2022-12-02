@@ -1,0 +1,42 @@
+name: NRM
+channels:
+  - conda-forge
+  - defaults
+dependencies:
+  - bzip2=1.0.8
+  - ca-certificates
+  - cffi=1.15.1
+  - colorama=0.4.6
+  - libblas=3.9.0
+  - libcblas=3.9.0
+  - libcxx=14.0.6
+  - libffi=3.4.2
+  - liblapack=3.9.0
+  - libopenblas=0.3.21
+  - libprotobuf=3.21.9
+  - libsqlite=3.40.0
+  - libzlib=1.2.13
+  - llvm-openmp=15.0.5
+  - mkl=2022.1.0
+  - ncurses=6.3
+  - ninja=1.11.0
+  - numpy=1.23.5
+  - openssl=3.0.7
+  - pip=22.3.1
+  - pycparser=2.21
+  - python=3.9.15
+  - python_abi=3.9
+  - pytorch=1.12.1
+  - pyyaml=6.0
+  - readline=8.1.2
+  - setuptools=65.5.1
+  - sleef=3.5.1
+  - tbb=2021.7.0
+  - tk=8.6.12
+  - tqdm=4.64.1
+  - typing_extensions=4.4.0
+  - tzdata=2022f
+  - wandb==0.13.5
+  - wheel=0.38.4
+  - xz=5.2.6
+  - yaml=0.2.5
