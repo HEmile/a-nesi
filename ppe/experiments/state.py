@@ -43,13 +43,20 @@ class MNISTAddState(StateBase):
 
         super().__init__(generate_w, final)
 
-    def next_state(self, action: torch.Tensor) -> MNISTAddState:
+    def next_state(self, action: torch.Tensor, beam_selector: Optional[torch.Tensor] = None) -> MNISTAddState:
         assert not self.final
         assert len(self.w) < 2 * self.N
 
         y = self.y
         w = self.w
         oh_state = self.oh_state
+        expanded_pw = self.expanded_pw
+
+        if beam_selector is not None:
+            y = list(map(lambda yi: yi.gather(-1, beam_selector), y))
+            w = list(map(lambda wi: wi.gather(-1, beam_selector), w))
+            oh_state = list(map(lambda ohi: ohi.gather(1, beam_selector.unsqueeze(-1).expand((-1, -1, ohi.shape[-1]))), oh_state))
+            expanded_pw = None
 
         if len(y) < self.N + 1:
             y = y + [action]
@@ -75,26 +82,9 @@ class MNISTAddState(StateBase):
                              y,
                              w,
                              oh_state,
-                             self.expanded_pw,
+                             expanded_pw,
                              generate_w=self.generate_w,
                              final=final)
-
-    def compute_success(self) -> torch.Tensor:
-        assert self.w is not None
-        assert self.y is not None
-        assert self.final
-        assert len(self.w) == 2 * self.N
-        assert len(self.y) == self.N + 1
-        # Compute constraint, ie whether the sum of the numbers is equal to the number represented by y
-        stack1 = torch.stack([10 ** (self.N - i - 1) * self.w[:self.N][i] for i in range(self.N)], -1)
-        stack2 = torch.stack([10 ** (self.N - i - 1) * self.w[self.N:][i] for i in range(self.N)], -1)
-
-        n1 = stack1.sum(-1)
-        n2 = stack2.sum(-1)
-
-        ny = self.query_to_number().unsqueeze(-1)
-
-        return n1 + n2 == ny
 
     def query_to_number(self) -> torch.Tensor:
         stacky = torch.stack([10 ** (self.N - i) * self.y[i] for i in range(self.N + 1)], -1)
@@ -109,15 +99,6 @@ class MNISTAddState(StateBase):
             sum += (self.pw[:, i] + EPS).log().gather(1, d)
         self.l_p = sum
         return sum
-
-    def next_prior(self) -> torch.Tensor:
-        assert not self.final
-        if self.y is None:
-            if self.constraint is not None:
-                return one_hot(self.constraint)
-            model_count = self.model_count()
-            return model_count / model_count.sum(-1, keepdim=True)
-        return self.pw[:, len(self.w)]
 
     def probability_vector(self) -> torch.Tensor:
         if len(self.oh_state) > 0 and len(self.oh_state[-1].shape) == 3:

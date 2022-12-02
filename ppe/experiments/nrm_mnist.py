@@ -93,7 +93,11 @@ class MNISTAddModel(PPEBase[MNISTAddState]):
 
         return n1 + n2
 
-    def success(self, result: NRMResult[MNISTAddState], y: torch.Tensor) -> torch.Tensor:
+    def success(self, result: NRMResult[MNISTAddState], y: torch.Tensor, beam=False) -> torch.Tensor:
         sample_y = result.final_state.y
+        if beam:
+            sample_y = list(map(lambda syi: syi[:, 0], sample_y))
+        else:
+            y = y.unsqueeze(-1)
         stack = torch.stack([10 ** (self.N - i) * sample_y[i] for i in range(self.N + 1)], -1)
-        return stack.sum(-1) == y.unsqueeze(-1)
+        return stack.sum(-1) == y

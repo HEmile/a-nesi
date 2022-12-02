@@ -8,8 +8,8 @@ from nrm import NRMBase, ST, NRMResult
 from fit_dirichlet import fit_dirichlet
 from torch.distributions import Categorical
 
-
 EPS = 1e-8
+
 
 class PPEBase(ABC, Generic[ST]):
 
@@ -217,7 +217,7 @@ class PPEBase(ABC, Generic[ST]):
 
     def test(self, x: torch.Tensor, y: torch.Tensor) -> torch.Tensor:
         result = self.sample(x, beam=True)
-        successes = self.success(result, y).float()
+        successes = self.success(result, y, beam=True).float()
         return torch.mean(successes)
 
     @abstractmethod
@@ -231,7 +231,7 @@ class PPEBase(ABC, Generic[ST]):
         pass
 
     @abstractmethod
-    def success(self, result: NRMResult[ST], y: torch.Tensor) -> torch.Tensor:
+    def success(self, result: NRMResult[ST], y: torch.Tensor, beam: bool = False) -> torch.Tensor:
         """
         Returns the _probability_ of success. Should probably return the most likely result and compare this instead.
         # TODO: Use a beam search here somehow to parse y

@@ -31,17 +31,18 @@ class StateBase(ABC):
         self.generate_w = generate_w
 
     @abstractmethod
-    def next_state(self, action: torch.Tensor) -> StateBase:
+    def next_state(self, action: torch.Tensor, beam_selector: Optional[torch.Tensor] = None) -> StateBase:
+        """
+        :param action: The action taken. Tensor of shape (batch, amount_samples)
+        :param beam_selector: The previous action picked during beam search. Tensor of shape (batch, amount_samples)
+          Set to None if not using beam search (when sampling).
+        :return: The next state
+        """
         pass
 
     @abstractmethod
     def log_p_world(self) -> torch.Tensor:
         # UNconditional log probability of the state (ie, prob of state irrespective of constraint)
-        pass
-
-    @abstractmethod
-    def next_prior(self) -> torch.Tensor:
-        # Conditional probability of the next state given everything in the current state
         pass
 
     @abstractmethod
@@ -182,7 +183,7 @@ class NRMBase(ABC, nn.Module, Generic[ST]):
                 # [batch, k]
                 _, action_flat = torch.topk(log_probs, k, dim=-1)
 
-                prev_action = action_flat // distribution.shape[-1]
+                prev_action = torch.div(action_flat, distribution.shape[-1], rounding_mode='floor')
                 action = action_flat % distribution.shape[-1]
 
                 for i in range(len(forward_probabilities)):
@@ -208,111 +209,3 @@ class NRMBase(ABC, nn.Module, Generic[ST]):
     @abstractmethod
     def distribution(self, state: ST) -> torch.Tensor:
         pass
-
-
-class GreedyNRM(NRMBase[ST]):
-
-    def __init__(self,
-                 gfn: NRMBase[ST],
-                 prune=True,
-                 greedy_prob: float = 0.0,
-                 uniform_prob: float = 0.0,
-                 loss_f='mse-tb',
-                 device='cpu'):
-        # mc_gfn: Model counting GFlowNet. Might include background knowledge
-        # wmc_gfn: Weighted model counting GFlowNet
-        super().__init__(loss_f, prune=prune)
-        self.gfn = gfn
-        self.greedy_prob = greedy_prob
-        self.uniform_prob = uniform_prob
-
-    def forward(self, state: ST, max_steps: Optional[int] = None, amt_samples=1,
-                sampler: Optional[Sampler] = None) -> NRMResult[ST]:
-        probs = []
-
-        if sampler is not None:
-            print("WARNING: Sampler is ignored in NeSyGFlowNet")
-        steps = max_steps
-        assert not state.final and (steps is None or steps > 0)
-        while not state.final and (steps is None or steps > 0):
-            # TODO: This is kinda hacky. This assumes we first deterministically select a constraint, then we start
-            #  sampling worlds from there.
-            # Run the weighted model counting GFlowNet. Sample proportionally, but prune impossible actions (if self.prune)
-            result = self.gfn(state, max_steps=1, amt_samples=amt_samples)
-
-            # Choose which action to use
-            mc_prob = self.greedy_prob + self.uniform_prob
-            if mc_prob > 0.000001:
-                # Sample using background knowledge (mostly runs the greedy sampler)
-                # !!This is not used in the current iteration of the framework, and can be ignored for now!!
-                mc_action = self.mc_sampler(amt_samples, state)
-
-                mask = torch.bernoulli(torch.fill(torch.empty_like(mc_action, dtype=torch.float), mc_prob)).bool()
-                action = torch.where(mask, mc_action, result.final_action)
-
-                # Move to next state
-                state = state.next_state(action)
-                should_unsqueeze = len(action.shape) < len(result.final_distribution.shape)
-                if should_unsqueeze:
-                    action = action.unsqueeze(-1)
-                # Update states
-                p = result.final_distribution.gather(-1, action)
-
-                if len(p.shape) > 2:
-                    p = p.squeeze(-1)
-
-                if should_unsqueeze:
-                    action = action.squeeze(-1)
-            else:
-                action = result.final_action
-                state = result.final_state
-                p = result.final_distribution
-
-            probs.append(p)
-
-            if steps:
-                steps -= 1
-
-        return NRMResult(state, probs, action, result.final_distribution)
-
-    def greedy_sampler(self, amount_models: torch.Tensor, amt_samples: int, state: ST) -> torch.Tensor:
-        prior = state.next_prior()
-        if len(amount_models.shape) == 3:
-            prior = prior.unsqueeze(1)
-        greedy_flow = amount_models * prior
-        greedy_dist = greedy_flow / greedy_flow.sum(-1).unsqueeze(-1)
-        sample_shape = (amt_samples,) if amt_samples > 1 else ()
-        # TODO: This is instable, because it's possible that the greedy flow is almost 0 everywhere
-        #  Or actually I get some nans
-        samples = Categorical(greedy_dist).sample(sample_shape)
-        if amt_samples > 1:
-            samples = samples.T
-        return samples
-
-    def mc_sampler(self, amt_samples: int, state: ST) -> torch.Tensor:
-        amt_models = state.model_count()
-        greedy_samples = None
-        if self.greedy_prob > 0:
-            # Only use the greedy sampler
-            greedy_samples = self.greedy_sampler(amt_models, amt_samples, state)
-        if self.uniform_prob > 0:
-            total_models = amt_models.sum(-1)
-            distribution = amt_models / total_models.unsqueeze(-1)
-
-            uniform_samples = self.regular_sampler(amt_models, distribution, amt_samples, state)
-            if self.greedy_prob > 0:
-                # Mix the two samplers
-                prob_greedy = self.greedy_prob / (self.greedy_prob + self.uniform_prob)
-                mask = torch.bernoulli(
-                    torch.fill(torch.empty_like(uniform_samples, dtype=torch.float), prob_greedy)).bool()
-                chosen_samples = torch.where(mask, greedy_samples, uniform_samples)
-                return chosen_samples
-            # Only the uniform sampler
-            return uniform_samples
-        return greedy_samples
-
-    def distribution(self, state: ST) -> torch.Tensor:
-        return self.gfn.distribution(state)
-
-    def loss(self, result: NRMResult[ST], is_wmc=True) -> torch.Tensor:
-        return self.gfn.loss(result, is_wmc=True)
