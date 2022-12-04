@@ -79,15 +79,16 @@ class PPEBase(ABC, Generic[ST]):
         y = self.symbolic_function(w)
 
         # (batch,)
-        log_p = p_w.log_prob(w).sum(-1)
+        log_p = p_w.log_prob(w)
+
 
         initial_state = self.initial_state(P, y, w)
         result = self.nrm.forward(initial_state)
-        log_q = (torch.stack(result.forward_probabilities, -1) + EPS).log().sum(-1)
+        log_q = (torch.stack(result.forward_probabilities, -1) + EPS).log()
         if self.nrm_loss == 'mse':
-            return (log_q - log_p).pow(2).mean()
+            return (log_q.sum(-1) - log_p.sum(-1)).pow(2).mean()
         elif self.nrm_loss == 'bce':
-            return nn.BCELoss()(log_q.exp(), log_p.exp())
+            return nn.BCELoss()(log_q.sum(-1).exp(), log_p.sum(-1).exp())
         raise NotImplementedError()
 
     def log_q_loss(self, P: torch.Tensor, y: torch.Tensor):
@@ -200,7 +201,7 @@ class PPEBase(ABC, Generic[ST]):
         return nrm_loss, loss_percept
 
     def test(self, x: torch.Tensor, y: torch.Tensor, true_w: Optional[List[torch.Tensor]] = None
-             ) -> Tuple[torch.Tensor, Optional[torch.Tensor], Optional[torch.Tensor]]:
+             ) -> Tuple[torch.Tensor, torch.Tensor, Optional[torch.Tensor], Optional[torch.Tensor]]:
         """
         Algorithm 1
         Sample from the PPE model
@@ -211,7 +212,13 @@ class PPEBase(ABC, Generic[ST]):
         P = self.perception(x)
         initial_state = self.initial_state(P)
         result: NRMResult[ST] = self.nrm.beam(initial_state, beam_size=self.amount_samples)
-        successes = self.success(result, y, beam=True).float()
+        successes = self.success(result.final_state.y, y, beam=True).float()
+
+        prior_predictions = torch.argmax(P, dim=-1)
+        prior_y = self.symbolic_function(prior_predictions)
+
+        successes_prior = (y == prior_y).float().mean()
+
         if true_w is not None:
             explain_acc = 0.
             for i in range(len(true_w)):
@@ -219,11 +226,10 @@ class PPEBase(ABC, Generic[ST]):
                 explain_acc += (result.final_state.w[i][:, 0] == true_w[i]).float().mean()
             explain_acc /= len(true_w)
 
-            prior_predictions = torch.argmax(P, dim=-1)
             prior_acc = (prior_predictions == torch.stack(true_w, 1)).float().mean()
 
-            return torch.mean(successes), explain_acc, prior_acc
-        return torch.mean(successes), None, None
+            return torch.mean(successes), successes_prior, explain_acc, prior_acc
+        return torch.mean(successes), successes_prior, None, None
 
     @abstractmethod
     def initial_state(self, P: torch.Tensor, y: Optional[torch.Tensor] = None, w: Optional[torch.Tensor] = None,
@@ -236,7 +242,7 @@ class PPEBase(ABC, Generic[ST]):
         pass
 
     @abstractmethod
-    def success(self, result: NRMResult[ST], y: torch.Tensor, beam: bool = False) -> torch.Tensor:
+    def success(self, prediction: List[torch.Tensor], y: torch.Tensor, beam: bool = False) -> torch.Tensor:
         """
         Returns the _probability_ of success. Should probably return the most likely result and compare this instead.
         # TODO: Use a beam search here somehow to parse y
