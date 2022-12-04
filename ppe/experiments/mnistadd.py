@@ -14,9 +14,10 @@ def test(x, label, label_digits, model, device):
     label_digits = list(map(lambda d: d.to(device), label_digits[0] + label_digits[1]))
     test_result = model.test(x, label, label_digits)
     acc = test_result[0].item()
-    explain_acc = test_result[1].item()
-    digit_acc = test_result[2].item()
-    return acc, explain_acc, digit_acc
+    acc_prior = test_result[1].item()
+    explain_acc = test_result[2].item()
+    digit_acc = test_result[3].item()
+    return acc, acc_prior, explain_acc, digit_acc
 
 if __name__ == '__main__':
     config = {
@@ -27,21 +28,20 @@ if __name__ == '__main__':
         "batch_size": 256,
         "amt_samples": 100,
         "nrm_lr": 1e-3,
-        "nrm_loss": "bce",
-        "policy": "both",
+        "nrm_loss": "mse",
+        "policy": "off",
         "perception_lr": 1e-3,
         "perception_loss": "log-q",
         "percept_loss_pref": 1.,
         "epochs": 30,
         "log_per_epoch": 10,
+        "layers": 1,
         "hidden_size": 200,
-        # "uniform_prob": 0.0,
-        # "greedy_prob": 0.0,
         "prune": True,
         "dirichlet_init": 1,
         "dirichlet_lr": 0.1,
         "dirichlet_iters": 10,
-        "dirichlet_L2": 0.0,
+        "dirichlet_L2": 100000.0,
         "K_beliefs": 100,
     }
 
@@ -104,6 +104,7 @@ if __name__ == '__main__':
         cum_loss_percept = 0
         cum_loss_nrm = 0
         train_acc = 0
+        train_acc_prior = 0
         train_explain_acc = 0
         train_digit_acc = 0
 
@@ -122,8 +123,9 @@ if __name__ == '__main__':
 
             test_result = test(x, label, label_digits, model, device)
             train_acc += test_result[0]
-            train_explain_acc += test_result[1]
-            train_digit_acc += test_result[2]
+            train_acc_prior += test_result[1]
+            train_explain_acc += test_result[2]
+            train_digit_acc += test_result[3]
 
             if (i + 1) % log_iterations == 0:
                 avg_alpha = torch.nn.functional.softplus(model.alpha).mean()
@@ -136,6 +138,7 @@ if __name__ == '__main__':
                       f"avg_alpha: {avg_alpha:.4f} ",
                       f"log_q_weight: {log_q_weight:.4f} ",
                       f"train_acc: {train_acc / log_iterations:.4f}",
+                      f"train_acc_prior: {train_acc_prior / log_iterations:.4f}",
                       f"train_explain_acc: {train_explain_acc / log_iterations:.4f}",
                       f"train_digit_acc: {train_digit_acc / log_iterations:.4f}")
 
@@ -144,6 +147,7 @@ if __name__ == '__main__':
                     "percept_loss": cum_loss_percept / log_iterations,
                     "nrm_loss": cum_loss_nrm / log_iterations,
                     "train_accuracy": train_acc / log_iterations,
+                    "train_accuracy_prior": train_acc_prior / log_iterations,
                     "train_explain_accuracy": train_explain_acc / log_iterations,
                     "train_digit_accuracy": train_digit_acc / log_iterations,
                     "avg_alpha": avg_alpha,
@@ -152,6 +156,7 @@ if __name__ == '__main__':
                 cum_loss_percept = 0
                 cum_loss_nrm = 0
                 train_acc = 0
+                train_acc_prior = 0
                 train_explain_acc = 0
                 train_digit_acc = 0
 
@@ -162,6 +167,7 @@ if __name__ == '__main__':
         else:
             print("----- VALIDATING -----")
         val_acc = 0.
+        val_acc_prior = 0.
         val_explain_acc = 0.
         val_digit_acc = 0.
         for i, batch in enumerate(val_loader):
@@ -170,10 +176,12 @@ if __name__ == '__main__':
 
             test_result = test(x.to(device), label.to(device), label_digits, model, device)
             val_acc += test_result[0]
-            val_explain_acc += test_result[1]
-            val_digit_acc += test_result[2]
+            val_acc_prior += test_result[1]
+            val_explain_acc += test_result[2]
+            val_digit_acc += test_result[3]
 
         val_accuracy = val_acc / len(val_loader)
+        val_accuracy_prior = val_acc_prior / len(val_loader)
         val_explain_accuracy = val_explain_acc / len(val_loader)
         val_digit_accuracy = val_digit_acc / len(val_loader)
         epoch_time = end_epoch_time - start_epoch_time
@@ -188,6 +196,7 @@ if __name__ == '__main__':
         wandb.log({
             # "epoch": epoch,
             f"{wdb_prefix}_accuracy": val_accuracy,
+            f"{wdb_prefix}_accuracy_prior": val_accuracy_prior,
             f"{wdb_prefix}_explain_accuracy": val_explain_accuracy,
             f"{wdb_prefix}_digit_accuracy": val_digit_accuracy,
             f"{wdb_prefix}_time": test_time,

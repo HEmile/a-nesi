@@ -1,4 +1,4 @@
-from typing import Optional
+from typing import Optional, List
 
 import torch
 from torch import nn
@@ -14,17 +14,19 @@ EPS = 1E-6
 
 class NRMMnist(NRMBase[MNISTAddState]):
 
-    def __init__(self, N: int, hidden_size: int = 200, prune: bool = True):
+    def __init__(self, N: int, layers = 1, hidden_size: int = 200, prune: bool = True):
         super().__init__(prune)
         self.N = N
+        self.layers = layers
 
         hidden_queries = [nn.Linear(20 * N + (1 + (i - 1) * 10 if i >= 1 else 0), hidden_size) for i in range(N + 1)]
         output_queries = [nn.Linear(hidden_size, 1)] + [nn.Linear(hidden_size, 10) for _ in range(N)]
 
         y_size = 1 + N * 10
 
-        self.hiddens = nn.ModuleList(hidden_queries +
+        self.input_layer = nn.ModuleList(hidden_queries +
                                      [nn.Linear(20 * N + y_size + i * 10, hidden_size) for i in range(2 * N)])
+        self.hiddens = nn.ModuleList([nn.Linear(hidden_size, hidden_size) for _ in range((3 * N + 1) * (layers - 1))])
         self.outputs = nn.ModuleList(output_queries +
                                      [nn.Linear(hidden_size, 10) for _ in range(2 * N)])
 
@@ -33,7 +35,11 @@ class NRMMnist(NRMBase[MNISTAddState]):
         layer_index = len(state.oh_state)
         inputs = torch.cat([p] + state.oh_state, -1)
 
-        z = torch.relu(self.hiddens[layer_index](inputs))
+        z = torch.relu(self.input_layer[layer_index](inputs))
+
+        for i in range(self.layers - 1):
+            z = torch.relu(self.hiddens[i * (3 * self.N + 1) + layer_index](z))
+
         logits = self.outputs[layer_index](z)
         if len(state.oh_state) > 0:
             dist = torch.softmax(logits, -1)
@@ -47,11 +53,13 @@ class MNISTAddModel(PPEBase[MNISTAddState]):
     def __init__(self, args, device='cpu'):
         self.N = args["N"]
         self.device = device
-        # The NN that will model p(x) (digit classification probabilities)
-        hidden_size = args["hidden_size"]
 
-        nrm = NRMMnist(self.N, hidden_size, prune=args["prune"]).to(device)
+        nrm = NRMMnist(self.N,
+                       layers=args["layers"],
+                       hidden_size=args["hidden_size"],
+                       prune=args["prune"]).to(device)
         super().__init__(nrm,
+                         # Perception network
                          MNIST_Net().to(device),
                          amount_samples=args['amt_samples'],
                          belief_size=[10] * 2 * self.N,
@@ -93,11 +101,10 @@ class MNISTAddModel(PPEBase[MNISTAddState]):
 
         return n1 + n2
 
-    def success(self, result: NRMResult[MNISTAddState], y: torch.Tensor, beam=False) -> torch.Tensor:
-        sample_y = result.final_state.y
+    def success(self, prediction: List[torch.Tensor], y: torch.Tensor, beam=False) -> torch.Tensor:
         if beam:
-            sample_y = list(map(lambda syi: syi[:, 0], sample_y))
+            prediction = list(map(lambda syi: syi[:, 0], prediction))
         else:
             y = y.unsqueeze(-1)
-        stack = torch.stack([10 ** (self.N - i) * sample_y[i] for i in range(self.N + 1)], -1)
+        stack = torch.stack([10 ** (self.N - i) * prediction[i] for i in range(self.N + 1)], -1)
         return stack.sum(-1) == y
