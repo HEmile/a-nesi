@@ -2,6 +2,7 @@ from typing import Optional, List
 
 import torch
 from torch import nn
+from torch.nn.functional import one_hot
 
 from nrm import NRMResult
 from experiments.MNISTNet import MNIST_Net
@@ -47,6 +48,65 @@ class NRMMnist(NRMBase[MNISTAddState]):
         dist = torch.sigmoid(logits)
         return dist
 
+class NRMMnistAttention(NRMBase[MNISTAddState]):
+
+    def __init__(self, N: int, layers = 1, hidden_size: int = 200, heads:int = 8, prune: bool = True):
+        super().__init__(prune)
+        self.N = N
+        self.layers = layers
+
+        self.embedding = nn.Linear(10, hidden_size)
+
+        self.attention_layers = nn.ModuleList([
+            nn.MultiheadAttention(hidden_size, heads, batch_first=True) for _ in range(layers)
+        ])
+        self.hidden_1 = nn.ModuleList([
+            nn.Linear(hidden_size, hidden_size) for _ in range(layers)
+        ])
+        self.hidden_2 = nn.ModuleList([
+            nn.Linear(hidden_size, hidden_size) for _ in range(layers)
+        ])
+
+        self.mlp = nn.ModuleList([nn.Linear((i + 2 * N) * hidden_size, hidden_size) for i in range(3 * N + 1)])
+        self.output = nn.ModuleList([nn.Linear(hidden_size, 1)] + [nn.Linear( hidden_size, 10) for i in range(3 * N)])
+
+    def distribution(self, state: MNISTAddState) -> torch.Tensor:
+        p = [state.pw[..., i, :] for i in range(2*self.N)]  # .detach()
+        y_1 = []
+        if len(state.y) > 0:
+            y_1.append(one_hot(state.y[0], 10))
+        layer_index = len(state.oh_state)
+        has_sample_dim = len(state.oh_state) > 0 and len(state.oh_state[0].shape) == 3
+        if has_sample_dim:
+            amt_samples = state.oh_state[0].shape[1]
+            p = list(map(lambda _p: _p.unsqueeze(1).expand(-1, amt_samples, -1), p))
+            if len(y_1[0].shape) == 2:
+                y_1[0] = y_1[0].unsqueeze(1).expand(-1, amt_samples, -1)
+        inputs = torch.stack(p + y_1 + state.oh_state[1:], -2)
+        if has_sample_dim:
+            inputs = inputs.reshape(-1, inputs.shape[2], inputs.shape[3])
+
+        z = self.embedding(inputs)
+
+        for i in range(self.layers):
+            z, _ = self.attention_layers[i](z, z, z, need_weights=False)
+            z = torch.relu(self.hidden_1[i](z))
+            z = self.hidden_2[i](z)
+
+        z = z.reshape((z.shape[0], -1))
+
+        z = torch.relu(self.mlp[layer_index](z))
+
+        logits = self.output[layer_index](z)
+
+        if has_sample_dim:
+            logits = logits.reshape((-1, amt_samples, logits.shape[1]))
+        if len(state.oh_state) > 0:
+            dist = torch.softmax(logits, -1)
+            return dist
+        dist = torch.sigmoid(logits)
+        return dist
+
 
 class MNISTAddModel(PPEBase[MNISTAddState]):
 
@@ -54,7 +114,7 @@ class MNISTAddModel(PPEBase[MNISTAddState]):
         self.N = args["N"]
         self.device = device
 
-        nrm = NRMMnist(self.N,
+        nrm = NRMMnistAttention(self.N,
                        layers=args["layers"],
                        hidden_size=args["hidden_size"],
                        prune=args["prune"]).to(device)
