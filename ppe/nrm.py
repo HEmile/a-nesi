@@ -25,7 +25,7 @@ class StateBase(ABC):
     final: bool
     generate_w: bool
 
-    def __init__(self, generate_w: bool=True, final: bool = False):
+    def __init__(self, generate_w: bool = True, final: bool = False):
         super().__init__()
         self.final = final
         self.generate_w = generate_w
@@ -58,6 +58,12 @@ class StateBase(ABC):
 ST = TypeVar("ST", bound=StateBase)
 
 
+class NoPossibleActionsException(ValueError):
+    # While very rare, we sometimes get into a state where there are no possible actions. This is a bug...
+    #  we don't want the whole system to crash when this happens. So we leave it up to the caller to decide how to handle
+    pass
+
+
 @dataclass
 class NRMResult(Generic[ST]):
     final_state: ST
@@ -83,10 +89,12 @@ class NRMBase(ABC, nn.Module, Generic[ST]):
             _distribution = torch.cat([_distribution, 1 - _distribution], dim=-1)
         if self.prune:
             mask = state.symbolic_pruner().float()
-            assert not (mask == 0).all(dim=-1).any()
+            if (mask == 0).all(dim=-1).any():
+                print("constraint", state.constraint, "y", state.y, "w", state.w, mask)
+                raise NoPossibleActionsException("No viable actions!")
 
             distribution = (_distribution + 10e-15) * mask
-            distribution = distribution / (distribution.sum(-1, keepdim=True))
+            distribution = distribution / (distribution.sum(-1, keepdim=True)).detach()
         else:
             distribution = _distribution
         return distribution

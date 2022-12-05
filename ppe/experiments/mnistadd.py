@@ -8,11 +8,17 @@ from experiments.nrm_mnist import MNISTAddModel
 import torch
 import wandb
 
+from nrm import NoPossibleActionsException
+
 SWEEP = True
 
 def test(x, label, label_digits, model, device):
-    label_digits = list(map(lambda d: d.to(device), label_digits[0] + label_digits[1]))
-    test_result = model.test(x, label, label_digits)
+    label_digits_l = list(map(lambda d: d.to(device), label_digits[0] + label_digits[1]))
+    try:
+        test_result = model.test(x, label, label_digits_l)
+    except NoPossibleActionsException:
+        print("No possible actions during testing")
+        test_result = test(x, label, label_digits, model, device)
     acc = test_result[0].item()
     acc_prior = test_result[1].item()
     explain_acc = test_result[2].item()
@@ -116,7 +122,11 @@ if __name__ == '__main__':
 
             x = torch.cat([numb1, numb2], dim=1).to(device)
             label = label.to(device)
-            loss_nrm, loss_percept = model.train(x, label)
+            try:
+                loss_nrm, loss_percept = model.train(x, label)
+            except NoPossibleActionsException:
+                print("No possible actions during training")
+                continue
 
             cum_loss_percept += loss_percept.item()
             cum_loss_nrm += loss_nrm.item()
@@ -151,7 +161,7 @@ if __name__ == '__main__':
                     "train_explain_accuracy": train_explain_acc / log_iterations,
                     "train_digit_accuracy": train_digit_acc / log_iterations,
                     "avg_alpha": avg_alpha,
-                    "log_q_weight": log_q_weight,
+                    # "log_q_weight": log_q_weight,
                 })
                 cum_loss_percept = 0
                 cum_loss_nrm = 0

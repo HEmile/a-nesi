@@ -191,9 +191,9 @@ class PPEBase(ABC, Generic[ST]):
 
         w_sampled = 1. if use_sampled_loss else 0.
         w_log_q = 1. if use_log_q_loss else 0.
-        if self.perception_loss == 'both':
-            w_log_q = torch.sigmoid(torch.log(self.percept_loss_pref * softplus(self.alpha.mean()))).detach()
-            w_sampled = 1. - w_log_q
+        # if self.perception_loss == 'both':
+        #     w_log_q = torch.sigmoid(torch.log(self.percept_loss_pref * softplus(self.alpha.mean()))).detach()
+        #     w_sampled = 1. - w_log_q
         loss_percept = w_sampled * loss_sampled + w_log_q * loss_log_q
         loss_percept.backward()
         self.perception_optimizer.step()
