@@ -10,7 +10,7 @@ parameters:
   epochs:
     values: [100]
   batch_size:
-    values: [ 1 ]
+    values: [ 16 ]
   amt_samples:
     values: [ 600 ]
   K_beliefs:

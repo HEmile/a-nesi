@@ -10,6 +10,8 @@ parameters:
   epochs:
     values: [3]
   batch_size:
+    values: [ 16 ]
+  batch_size_test:
     values: [ 1 ]
   amt_samples:
     values: [ 600 ]

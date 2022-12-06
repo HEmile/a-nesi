@@ -31,7 +31,8 @@ if __name__ == '__main__':
         "DEBUG": False,
         "N": 1,
         "test": False,
-        "batch_size": 256,
+        "batch_size": 16,
+        "batch_size_test": 16,
         "amt_samples": 100,
         "nrm_lr": 1e-3,
         "nrm_loss": "mse",
@@ -97,7 +98,7 @@ if __name__ == '__main__':
     model = MNISTAddModel(config, device=device)
 
     train_loader = DataLoader(train_set, config["batch_size"], False)
-    val_loader = DataLoader(val_set, config["batch_size"], False)
+    val_loader = DataLoader(val_set, config["batch_size_test"], False)
 
     log_iterations = len(train_loader) // config["log_per_epoch"]
 
