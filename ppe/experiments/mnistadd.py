@@ -100,6 +100,8 @@ if __name__ == '__main__':
     train_loader = DataLoader(train_set, config["batch_size"], False)
     val_loader = DataLoader(val_set, config["batch_size_test"], False)
 
+    print(len(val_loader))
+
     log_iterations = len(train_loader) // config["log_per_epoch"]
 
     if config["DEBUG"]:

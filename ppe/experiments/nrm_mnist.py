@@ -93,8 +93,8 @@ class MNISTAddModel(PPEBase[MNISTAddState]):
         """
         w: (batch_size, 2*n)
         """
-        stack1 = torch.stack([10 ** (self.N - i - 1) * w[:, i] for i in range(self.N)], -1)
-        stack2 = torch.stack([10 ** (self.N - i - 1) * w[:, self.N + i] for i in range(self.N)], -1)
+        stack1 = torch.stack([10 ** (self.N - i - 1) * w[..., i] for i in range(self.N)], -1)
+        stack2 = torch.stack([10 ** (self.N - i - 1) * w[..., self.N + i] for i in range(self.N)], -1)
 
         n1 = stack1.sum(-1)
         n2 = stack2.sum(-1)

@@ -1,6 +1,7 @@
 N: 1
 batch_size: 16
-amt_samples: 60
+batch_size_test: 16
+amt_samples: 23
 nrm_lr: 0.0012
 perception_lr: 0.003
 nrm_loss: 'mse'
@@ -16,3 +17,4 @@ dirichlet_L2: 900000
 layers: 3
 DEBUG: True
 test: False
+prune: False

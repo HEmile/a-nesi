@@ -115,22 +115,27 @@ class PPEBase(ABC, Generic[ST]):
         w = w.permute(1, 0, 2)
 
         # Take sum of log probs over all dimensions
-        log_p_w = Categorical(probs=P).log_prob(w).sum(-1)
+        log_p_w = Categorical(probs=P).log_prob(w).sum(-1).T
 
         if compute_perception_loss:
             # # TODO: This might underflow
             # q_y = torch.stack(
             #     result.forward_probabilities[:len(result.final_state.y)], 1
             # ).prod(-1).detach()
-
-            percept_loss = -(log_p_w.mean(0)).mean()
+            if self.nrm.prune:
+                # If we prune, we know we are successful by definition
+                percept_loss = -log_p_w.mean()
+            else:
+                prediction = self.symbolic_function(torch.stack(result.final_state.w, -1))
+                successes = prediction == y.unsqueeze(-1)
+                percept_loss = -(log_p_w * successes).mean() if successes.any() else 0.
 
         if compute_nrm_loss:
             log_q_y = (torch.stack(result.forward_probabilities[:len(result.final_state.y)], 1) + EPS).log().sum(-1)
             log_q_y = log_q_y.unsqueeze(-1)
             log_q_w_y = (torch.stack(result.forward_probabilities[len(result.final_state.y):], -1) + EPS).log().sum(-1)
             log_q = log_q_y + log_q_w_y
-            log_p_w = log_p_w.detach().T
+            log_p_w = log_p_w.detach()
             if self.nrm_loss == 'mse':
                 nrm_loss = (log_q - log_p_w).pow(2).mean()
             elif self.nrm_loss == 'bce':
