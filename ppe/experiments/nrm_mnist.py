@@ -114,10 +114,16 @@ class MNISTAddModel(PPEBase[MNISTAddState]):
         self.N = args["N"]
         self.device = device
 
-        nrm = NRMMnistAttention(self.N,
-                       layers=args["layers"],
-                       hidden_size=args["hidden_size"],
-                       prune=args["prune"]).to(device)
+        if args["nrm_model"] == 'transformer':
+            nrm = NRMMnistAttention(self.N,
+                           layers=args["layers"],
+                           hidden_size=args["hidden_size"],
+                           prune=args["prune"]).to(device)
+        else:
+            nrm = NRMMnist(self.N,
+                           layers=args["layers"],
+                           hidden_size=args["hidden_size"],
+                           prune=args["prune"]).to(device)
         super().__init__(nrm,
                          # Perception network
                          MNIST_Net().to(device),

@@ -43,6 +43,7 @@ if __name__ == '__main__':
         "log_per_epoch": 10,
         "layers": 1,
         "hidden_size": 200,
+        "nrm_model": "mlp",
         "prune": True,
         "dirichlet_init": 1,
         "dirichlet_lr": 0.1,

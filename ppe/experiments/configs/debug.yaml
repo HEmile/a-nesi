@@ -14,5 +14,6 @@ dirichlet_iters: 50
 dirichlet_init: 0.01
 dirichlet_L2: 900000
 layers: 2
+nrm_model: 'transformer'
 DEBUG: True
 test: False
