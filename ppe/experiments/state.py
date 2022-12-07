@@ -168,7 +168,8 @@ class MNISTAddState(StateBase):
         if len(n1.shape) > len(ny.shape):
             ny = ny.unsqueeze(-1)
         n2 = ny - n1
-        d = torch.floor(n2 / (10 ** (2 * self.N - kth_digit - 1)) % 10).long()
+        d = (torch.div(n2, (10 ** (2 * self.N - kth_digit - 1)), rounding_mode="floor") % 10).long()
+        # print(n1, ny, self.y, self.constraint, n2, d)
         # TODO: This assumes for every d1 there is a solution (ie 0 <= constraint - d1 <= 9)
         return torch.nn.functional.one_hot(d, 10).int()
 

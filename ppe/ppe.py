@@ -122,12 +122,14 @@ class PPEBase(ABC, Generic[ST]):
             # q_y = torch.stack(
             #     result.forward_probabilities[:len(result.final_state.y)], 1
             # ).prod(-1).detach()
+            prediction = self.symbolic_function(torch.stack(result.final_state.w, -1))
+            successes = prediction == y.unsqueeze(-1)
+            print(y)
             if self.nrm.prune:
                 # If we prune, we know we are successful by definition
+                assert successes.all()
                 percept_loss = -log_p_w.mean()
             else:
-                prediction = self.symbolic_function(torch.stack(result.final_state.w, -1))
-                successes = prediction == y.unsqueeze(-1)
                 percept_loss = -(log_p_w * successes).mean() if successes.any() else 0.
 
         if compute_nrm_loss:

@@ -86,7 +86,7 @@ class MNISTAddModel(PPEBase[MNISTAddState]):
             w_list = [w[:, i] for i in range(self.N * 2)]
         y_list = None
         if y is not None:
-            y_list = [torch.floor(y / (10 ** (self.N - i)) % 10).long() for i in range(self.N + 1)]
+            y_list = [(torch.div(y,  (10 ** (self.N - i)), rounding_mode='floor') % 10).long() for i in range(self.N + 1)]
         return MNISTAddState(P, self.N, (y_list, w_list), generate_w=generate_w)
 
     def symbolic_function(self, w: torch.Tensor) -> torch.Tensor:
@@ -98,6 +98,8 @@ class MNISTAddModel(PPEBase[MNISTAddState]):
 
         n1 = stack1.sum(-1)
         n2 = stack2.sum(-1)
+
+        # print(n1, n2, n1 + n2, (n1 + n2).float().mean(-1))
 
         return n1 + n2
 
