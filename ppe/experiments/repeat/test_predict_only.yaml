@@ -4,7 +4,7 @@ entity: nesy-gems
 method: grid
 parameters:
   N:
-    values: [ 15, 10, 1, 7, 9, 8, 6, 5, 2, 3, 4,]
+    values: [ 15, 1, 10, 7, 9, 8, 6, 5, 2, 3, 4,]
   runs:
     values: [ 1, 2, 3, 4, 5 ]
   epochs:
@@ -30,7 +30,7 @@ parameters:
   nrm_loss:
     values: [ 'mse' ]
   perception_loss:
-    values: [ 'both' ]
+    values: [ 'log-q' ]
   percept_loss_pref:
     values: [ 1 ]
   policy:
@@ -44,4 +44,4 @@ parameters:
   prune:
     values: [ False ]
   predict_only:
-    values: [ False ]
+    values: [ True ]

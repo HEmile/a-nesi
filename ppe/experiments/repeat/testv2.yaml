@@ -41,3 +41,5 @@ parameters:
     values: [3]
   test:
     values: [ True ]
+  predict_only:
+    values: [ False ]
