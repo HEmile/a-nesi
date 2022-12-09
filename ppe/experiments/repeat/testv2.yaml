@@ -39,6 +39,8 @@ parameters:
     values: [ 800 ]
   layers:
     values: [3]
+  prune:
+    values: [ True ]
   test:
     values: [ True ]
   predict_only:

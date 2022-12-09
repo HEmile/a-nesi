@@ -43,3 +43,5 @@ parameters:
     values: [ True ]
   prune:
     values: [ True ]
+  predict_only:
+    values: [ False ]
