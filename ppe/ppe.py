@@ -124,7 +124,7 @@ class PPEBase(ABC, Generic[ST]):
             # ).prod(-1).detach()
             prediction = self.symbolic_function(torch.stack(result.final_state.w, -1))
             successes = prediction == y.unsqueeze(-1)
-            print(y)
+            # print(y)
             if self.nrm.prune:
                 # If we prune, we know we are successful by definition
                 assert successes.all()

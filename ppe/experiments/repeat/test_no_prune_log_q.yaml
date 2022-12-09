@@ -30,7 +30,7 @@ parameters:
   nrm_loss:
     values: [ 'mse' ]
   perception_loss:
-    values: [ 'both' ]
+    values: [ 'log-q' ]
   percept_loss_pref:
     values: [ 1 ]
   policy:
