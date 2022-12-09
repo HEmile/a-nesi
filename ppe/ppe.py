@@ -23,6 +23,7 @@ class PPEBase(ABC, Generic[ST]):
                  dirichlet_lr: float = 1.0,
                  dirichlet_L2: float = 0.0,
                  K_beliefs: int = 100,
+                 predict_only: bool = False,
                  nrm_lr=1e-3,
                  nrm_loss="mse",
                  policy: str = "both",
@@ -42,6 +43,12 @@ class PPEBase(ABC, Generic[ST]):
         assert perception_loss in ['sampled', 'log-q', 'both']
         assert nrm_loss in ['mse', 'bce']
         assert policy in ['both', 'off', 'on']
+        # prediction only option is only supported for off-policy learning of nrm
+        assert not (predict_only and policy in ['on', 'both'])
+        # Sampled loss requires explain model
+        assert not (predict_only and perception_loss in ['sampled', 'both'])
+
+        self.predict_only = predict_only
         self.nrm = nrm
         self.perception = perception
         self.amount_samples = amount_samples
@@ -78,13 +85,17 @@ class PPEBase(ABC, Generic[ST]):
         # (batch,)
         y = self.symbolic_function(w)
 
-        # (batch,)
-        log_p = p_w.log_prob(w)
-
-
-        initial_state = self.initial_state(P, y, w)
+        initial_state = self.initial_state(P, y, w, generate_w=not self.predict_only)
         result = self.nrm.forward(initial_state)
         log_q = (torch.stack(result.forward_probabilities, -1) + EPS).log()
+
+        if self.predict_only:
+            # KL div loss. Increases probability of observed ys
+            return -log_q.sum(-1).mean()
+
+        # Joint matching loss
+        # (batch,)
+        log_p = p_w.log_prob(w)
         if self.nrm_loss == 'mse':
             return (log_q.sum(-1) - log_p.sum(-1)).pow(2).mean()
         elif self.nrm_loss == 'bce':
@@ -217,7 +228,7 @@ class PPEBase(ABC, Generic[ST]):
         :param true_w: The true w (explanation to get to y). Used to evaluate if explanations are correct
         """
         P = self.perception(x)
-        initial_state = self.initial_state(P)
+        initial_state = self.initial_state(P, generate_w=not self.predict_only)
         result: NRMResult[ST] = self.nrm.beam(initial_state, beam_size=self.amount_samples)
         successes = self.success(result.final_state.y, y, beam=True).float()
 
@@ -227,11 +238,12 @@ class PPEBase(ABC, Generic[ST]):
         successes_prior = (y == prior_y).float().mean()
 
         if true_w is not None:
-            explain_acc = 0.
-            for i in range(len(true_w)):
-                # Get beam search prediction of w, compare to ground truth w
-                explain_acc += (result.final_state.w[i][:, 0] == true_w[i]).float().mean()
-            explain_acc /= len(true_w)
+            explain_acc = torch.tensor(0.)
+            if not self.predict_only:
+                for i in range(len(true_w)):
+                    # Get beam search prediction of w, compare to ground truth w
+                    explain_acc += (result.final_state.w[i][:, 0] == true_w[i]).float().mean()
+                explain_acc /= len(true_w)
 
             prior_acc = (prior_predictions == torch.stack(true_w, 1)).float().mean()
 

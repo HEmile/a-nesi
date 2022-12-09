@@ -34,6 +34,7 @@ if __name__ == '__main__':
         "batch_size": 16,
         "batch_size_test": 16,
         "amt_samples": 100,
+        "predict_only": False,
         "nrm_lr": 1e-3,
         "nrm_loss": "mse",
         "policy": "off",
