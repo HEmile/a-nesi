@@ -23,6 +23,7 @@ class PPEBase(ABC, Generic[ST]):
                  dirichlet_lr: float = 1.0,
                  dirichlet_L2: float = 0.0,
                  K_beliefs: int = 100,
+                 predict_only: bool = False,
                  nrm_lr=1e-3,
                  nrm_loss="mse",
                  policy: str = "both",
@@ -42,6 +43,12 @@ class PPEBase(ABC, Generic[ST]):
         assert perception_loss in ['sampled', 'log-q', 'both']
         assert nrm_loss in ['mse', 'bce']
         assert policy in ['both', 'off', 'on']
+        # prediction only option is only supported for off-policy learning of nrm
+        assert not (predict_only and policy in ['on', 'both'])
+        # Sampled loss requires explain model
+        assert not (predict_only and perception_loss in ['sampled', 'both'])
+
+        self.predict_only = predict_only
         self.nrm = nrm
         self.perception = perception
         self.amount_samples = amount_samples
@@ -78,13 +85,17 @@ class PPEBase(ABC, Generic[ST]):
         # (batch,)
         y = self.symbolic_function(w)
 
-        # (batch,)
-        log_p = p_w.log_prob(w)
-
-
-        initial_state = self.initial_state(P, y, w)
+        initial_state = self.initial_state(P, y, w, generate_w=not self.predict_only)
         result = self.nrm.forward(initial_state)
         log_q = (torch.stack(result.forward_probabilities, -1) + EPS).log()
+
+        if self.predict_only:
+            # KL div loss
+            return -log_q.sum(-1).mean()
+
+        # Joint matching loss
+        # (batch,)
+        log_p = p_w.log_prob(w)
         if self.nrm_loss == 'mse':
             return (log_q.sum(-1) - log_p.sum(-1)).pow(2).mean()
         elif self.nrm_loss == 'bce':

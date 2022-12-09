@@ -1,11 +1,12 @@
-N: 15
+N: 1
 batch_size: 16
 batch_size_test: 23
 amt_samples: 17
 nrm_lr: 0.0012
 perception_lr: 0.003
+predict_only: True
 nrm_loss: 'mse'
-perception_loss: 'both'
+perception_loss: 'log-q'
 percept_loss_pref: 1
 policy: 'off'
 hidden_size: 450
