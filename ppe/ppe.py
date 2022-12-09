@@ -90,7 +90,7 @@ class PPEBase(ABC, Generic[ST]):
         log_q = (torch.stack(result.forward_probabilities, -1) + EPS).log()
 
         if self.predict_only:
-            # KL div loss
+            # KL div loss. Increases probability of observed ys
             return -log_q.sum(-1).mean()
 
         # Joint matching loss
@@ -228,7 +228,7 @@ class PPEBase(ABC, Generic[ST]):
         :param true_w: The true w (explanation to get to y). Used to evaluate if explanations are correct
         """
         P = self.perception(x)
-        initial_state = self.initial_state(P)
+        initial_state = self.initial_state(P, generate_w=not self.predict_only)
         result: NRMResult[ST] = self.nrm.beam(initial_state, beam_size=self.amount_samples)
         successes = self.success(result.final_state.y, y, beam=True).float()
 
@@ -238,11 +238,12 @@ class PPEBase(ABC, Generic[ST]):
         successes_prior = (y == prior_y).float().mean()
 
         if true_w is not None:
-            explain_acc = 0.
-            for i in range(len(true_w)):
-                # Get beam search prediction of w, compare to ground truth w
-                explain_acc += (result.final_state.w[i][:, 0] == true_w[i]).float().mean()
-            explain_acc /= len(true_w)
+            explain_acc = torch.tensor(0.)
+            if not self.predict_only:
+                for i in range(len(true_w)):
+                    # Get beam search prediction of w, compare to ground truth w
+                    explain_acc += (result.final_state.w[i][:, 0] == true_w[i]).float().mean()
+                explain_acc /= len(true_w)
 
             prior_acc = (prior_predictions == torch.stack(true_w, 1)).float().mean()
 
