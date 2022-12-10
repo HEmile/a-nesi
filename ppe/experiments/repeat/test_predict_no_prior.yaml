@@ -4,9 +4,9 @@ entity: nesy-gems
 method: grid
 parameters:
   N:
-    values: [ 15, 10, 1, 7, 9, 8, 6, 5, 2, 3, 4,]
+    values: [ 15, 1, 10, 7, 9, 8, 6, 5, 2, 3, 4,]
   runs:
-    values: [ 1, 2, 3, 4, 5 ]
+    values: [ 1, 2, 3, 4, 5, 6, 7, 8, 9, 10 ]
   epochs:
     values: [100]
   batch_size:
@@ -30,7 +30,7 @@ parameters:
   nrm_loss:
     values: [ 'mse' ]
   perception_loss:
-    values: [ 'both' ]
+    values: [ 'log-q' ]
   percept_loss_pref:
     values: [ 1 ]
   policy:
@@ -44,6 +44,6 @@ parameters:
   prune:
     values: [ False ]
   predict_only:
-    values: [ False ]
-  use_prior:
     values: [ True ]
+  use_prior:
+    values: [ False]

@@ -45,3 +45,5 @@ parameters:
     values: [ False ]
   predict_only:
     values: [ True ]
+  use_prior:
+    values: [ True ]

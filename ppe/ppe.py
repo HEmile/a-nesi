@@ -24,6 +24,7 @@ class PPEBase(ABC, Generic[ST]):
                  dirichlet_L2: float = 0.0,
                  K_beliefs: int = 100,
                  predict_only: bool = False,
+                 use_prior: bool = True,
                  nrm_lr=1e-3,
                  nrm_loss="mse",
                  policy: str = "both",
@@ -49,6 +50,7 @@ class PPEBase(ABC, Generic[ST]):
         assert not (predict_only and perception_loss in ['sampled', 'both'])
 
         self.predict_only = predict_only
+        self.use_prior = use_prior
         self.nrm = nrm
         self.perception = perception
         self.amount_samples = amount_samples
@@ -71,13 +73,15 @@ class PPEBase(ABC, Generic[ST]):
         self.alpha.requires_grad = True
         self.beliefs = None
 
-    def off_policy_loss(self, p_P: torch.Tensor) -> torch.Tensor:
+    def off_policy_loss(self, p_P: torch.Tensor, batch_P: torch.Tensor) -> torch.Tensor:
         """
         Algorithm 2
         For now assumes all w_i are the same size
         """
-
-        P = p_P.sample((self.amount_samples,))
+        if self.use_prior:
+            P = p_P.sample((self.amount_samples,))
+        else:
+            P = batch_P
         p_w = Categorical(probs=P)
         # (batch, |W|)
         w = p_w.sample()
@@ -86,7 +90,9 @@ class PPEBase(ABC, Generic[ST]):
         y = self.symbolic_function(w)
 
         initial_state = self.initial_state(P, y, w, generate_w=not self.predict_only)
-        result = self.nrm.forward(initial_state)
+
+        amt_samples = self.amount_samples if self.use_prior else 1
+        result = self.nrm.forward(initial_state, amt_samples=amt_samples)
         log_q = (torch.stack(result.forward_probabilities, -1) + EPS).log()
 
         if self.predict_only:
@@ -182,7 +188,7 @@ class PPEBase(ABC, Generic[ST]):
             p_P = fit_dirichlet(beliefs, self.alpha, self.dirichlet_lr, self.dirichlet_iters, self.dirichlet_L2)
 
             if use_off_policy_loss:
-                _nrm_loss = self.off_policy_loss(p_P)
+                _nrm_loss = self.off_policy_loss(p_P, P.detach())
                 _nrm_loss.backward()
                 nrm_loss += _nrm_loss
                 self.nrm_optimizer.step()
@@ -238,7 +244,7 @@ class PPEBase(ABC, Generic[ST]):
         successes_prior = (y == prior_y).float().mean()
 
         if true_w is not None:
-            explain_acc = torch.tensor(0.)
+            explain_acc = torch.tensor(0., device=successes.device)
             if not self.predict_only:
                 for i in range(len(true_w)):
                     # Get beam search prediction of w, compare to ground truth w

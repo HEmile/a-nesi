@@ -5,6 +5,7 @@ amt_samples: 17
 nrm_lr: 0.0012
 perception_lr: 0.003
 predict_only: True
+use_prior: False
 nrm_loss: 'mse'
 perception_loss: 'log-q'
 percept_loss_pref: 1

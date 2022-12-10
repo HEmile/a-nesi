@@ -69,6 +69,7 @@ class MNISTAddModel(PPEBase[MNISTAddState]):
                          dirichlet_L2=args['dirichlet_L2'],
                          K_beliefs=args['K_beliefs'],
                          predict_only=args['predict_only'],
+                         use_prior=args['use_prior'],
                          nrm_lr=args['nrm_lr'],
                          nrm_loss=args['nrm_loss'],
                          policy=args['policy'],
