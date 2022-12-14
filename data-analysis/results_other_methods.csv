@@ -1,0 +1,13 @@
+Name;Runtime;perception_loss;method;predict_only;use_prior;prune;N;nrm_loss;percept_loss;train_accuracy;test_accuracy;test_accuracy_std;test_accuracy_prior;test_accuracy_prior_std;test_digit_accuracy;test_digit_accuracy_std;test_explain_accuracy;test_time;train_accuracy_prior;train_digit_accuracy;train_explain_accuracy;epoch_time
+Embed2sym 1;;;Embed2Sym;;;;1;;;;97.34;0.194;97.62;0.289;98.806;;;;;;;
+Embed2sym 2;;;Embed2Sym;;;;2;;;;84.35;6.1595;93.81;1.3707;98.419;0.3636;;;;;;
+Embed2sym 3;;;Embed2Sym;;;;3;;;;7.51;5.27;92.76;0.8222;98.747;0.1471;;;;;;
+Embed2sym 4;;;Embed2Sym;;;;4;;;;00.73;;91.51;;98.92;;;;;;;
+Embed2sym 15;;;Embed2Sym;;;;15;;;;0;;66.40;;98.64;;;;;;;
+DPL 1;;;DeepProbLog;;;;1;;;;;;97.2;0.5;;;;;;;;
+DPL 2;;;DeepProbLog;;;;2;;;;;;95.2;1.7;;;;;;;;
+NeurASP 1;;;NeurASP;;;;1;;;;;;97.3;0.3;;;;;;;;
+NeurASP 2;;;NeurASP;;;;2;;;;;;93.9;0.7;;;;;;;;
+DPLA* 1;;;DPLA*;;;;1;;;;;;88.9;14.8;;;;;;;;
+DPLA* 2;;;DPLA*;;;;2;;;;;;83.6;23.7;;;;;;;;
+DPLA* 3;;;DPLA*;;;;3;;;;;;77.4;33.3;;;;;;;;
