@@ -65,7 +65,7 @@ class NoPossibleActionsException(ValueError):
 
 
 @dataclass
-class NRMResult(Generic[ST]):
+class InferenceResult(Generic[ST]):
     final_state: ST
     forward_probabilities: List[torch.Tensor]
     final_action: torch.Tensor
@@ -75,11 +75,9 @@ class NRMResult(Generic[ST]):
 Sampler = Callable[[torch.Tensor, int, ST], torch.Tensor]
 
 
-class NRMBase(ABC, nn.Module, Generic[ST]):
+class InferenceModelBase(ABC, nn.Module, Generic[ST]):
     def __init__(self, prune=True):
         super().__init__()
-        # Saves nonzero results. Shouldn't be used when running the Neurosymbolic GFlowNet as it is guaranteed to sample
-        #  models.
         self.prune = prune
 
     def _compute_distribution(self, state: ST) -> torch.Tensor:
@@ -103,11 +101,7 @@ class NRMBase(ABC, nn.Module, Generic[ST]):
                 state: ST,
                 max_steps: Optional[int] = None,
                 amt_samples=1,
-                sampler: Optional[Sampler] = None) -> NRMResult[ST]:
-        # sampler: If None, this samples in proportion to the flow.
-        # Otherwise, this should be a function that takes the flow, the distribution, the number of samples, and the state, and returns a sample
-
-        # Sample (hopefully) positive worlds to estimate gradients
+                sampler: Optional[Sampler] = None) -> InferenceResult[ST]:
         forward_probabilities = []
         steps = max_steps
         assert not state.final and (steps is None or steps > 0)
@@ -156,7 +150,7 @@ class NRMBase(ABC, nn.Module, Generic[ST]):
             if not state.generate_w and state.finished_generating_y():
                 break
         final_state = state
-        return NRMResult(final_state, forward_probabilities, action, s_dist)
+        return InferenceResult(final_state, forward_probabilities, action, s_dist)
 
     def beam(self, initial_state: ST, beam_size: int):
         """
@@ -204,7 +198,7 @@ class NRMBase(ABC, nn.Module, Generic[ST]):
             if not state.generate_w and state.finished_generating_y():
                 break
         final_state = state
-        return NRMResult(final_state, forward_probabilities, action, distribution)
+        return InferenceResult(final_state, forward_probabilities, action, distribution)
 
     def regular_sampler(self, distribution: torch.Tensor, amt_samples: int,
                         state: ST) -> torch.Tensor:

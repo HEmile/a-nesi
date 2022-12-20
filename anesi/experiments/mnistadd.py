@@ -8,7 +8,7 @@ from experiments.nrm_mnist import MNISTAddModel
 import torch
 import wandb
 
-from nrm import NoPossibleActionsException
+from anesi.inference_models import NoPossibleActionsException
 
 SWEEP = True
 

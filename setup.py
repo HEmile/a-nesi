@@ -2,10 +2,10 @@
 from setuptools import setup, find_packages
 
 setup(
-    name="ppe",
+    name="anesi",
     version="0.0.1",
-    description="Neurosymbolic Reverse Model",
-    url="https://github.com/HEmile/deepproblog-mc",
+    description="A-NeSI: Approximate Neurosymbolic Inference",
+    url="https://github.com/HEmile/a-nesi",
     author="Emile van Krieken",
     author_email="e.van.Krieken@vu.nl",
     license='MIT',
@@ -16,8 +16,8 @@ setup(
         "Topic :: Scientific/Engineering :: Artificial Intelligence",
     ],
     keywords="",
-    package_dir={"": "ppe"},
-    packages=find_packages(where="ppe"),
+    package_dir={"": "anesi"},
+    packages=find_packages(where="anesi"),
     python_requires='>=3.8',
     zip_safe=False,
     include_package_data=True,

@@ -1,4 +1,4 @@
-name: NRM
+name: ANeSI
 channels:
   - conda-forge
   - defaults

@@ -3,16 +3,15 @@ from typing import Optional, List
 import torch
 from torch import nn
 
-from nrm import NRMResult
+from anesi.inference_models import InferenceResult, InferenceModelBase
 from experiments.MNISTNet import MNIST_Net
-from nrm import NRMBase
 from experiments.state import MNISTAddState
-from ppe import PPEBase
+from anesi import ANeSIBase
 
 EPS = 1E-6
 
 
-class NRMMnist(NRMBase[MNISTAddState]):
+class InferenceModelMnist(InferenceModelBase[MNISTAddState]):
 
     def __init__(self, N: int, layers = 1, hidden_size: int = 200, prune: bool = True):
         super().__init__(prune)
@@ -48,17 +47,17 @@ class NRMMnist(NRMBase[MNISTAddState]):
         return dist
 
 
-class MNISTAddModel(PPEBase[MNISTAddState]):
+class MNISTAddModel(ANeSIBase[MNISTAddState]):
 
     def __init__(self, args, device='cpu'):
         self.N = args["N"]
         self.device = device
 
-        nrm = NRMMnist(self.N,
-                       layers=args["layers"],
-                       hidden_size=args["hidden_size"],
-                       prune=args["prune"]).to(device)
-        super().__init__(nrm,
+        im = InferenceModelMnist(self.N,
+                                  layers=args["layers"],
+                                  hidden_size=args["hidden_size"],
+                                  prune=args["prune"]).to(device)
+        super().__init__(im,
                          # Perception network
                          MNIST_Net().to(device),
                          amount_samples=args['amt_samples'],
@@ -70,8 +69,8 @@ class MNISTAddModel(PPEBase[MNISTAddState]):
                          K_beliefs=args['K_beliefs'],
                          predict_only=args['predict_only'],
                          use_prior=args['use_prior'],
-                         nrm_lr=args['nrm_lr'],
-                         nrm_loss=args['nrm_loss'],
+                         q_lr=args['nrm_lr'],
+                         q_loss=args['nrm_loss'],
                          policy=args['policy'],
                          perception_lr=args['perception_lr'],
                          perception_loss=args['perception_loss'],

@@ -1,5 +1,5 @@
 wandb/
-ppe/ppe.egg-info
+anesi/ppe.egg-info
 
 ## Core latex/pdflatex auxiliary files:
 *.aux
@@ -244,7 +244,7 @@ data/MNIST/processed/
 data/MNIST/raw/
 sdd/
 /venv/
-ppe/experiments/wandb/
-ppe/experiments/data/
-ppe/ppe.egg-info/
+anesi/experiments/wandb/
+anesi/experiments/data/
+anesi/ppe.egg-info/
 src/gflownet/experiments/

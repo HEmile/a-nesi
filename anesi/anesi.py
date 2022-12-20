@@ -2,19 +2,18 @@ from abc import ABC, abstractmethod
 from typing import Generic, List, Tuple, Optional
 import torch
 from torch import nn
-from torch.nn.functional import one_hot, softplus
 
-from nrm import NRMBase, ST, NRMResult
+from inference_models import InferenceModelBase, ST, InferenceResult
 from fit_dirichlet import fit_dirichlet
 from torch.distributions import Categorical
 
 EPS = 1e-8
 
 
-class PPEBase(ABC, Generic[ST]):
+class ANeSIBase(ABC, Generic[ST]):
 
     def __init__(self,
-                 nrm: NRMBase[ST],
+                 q: InferenceModelBase[ST],
                  perception: nn.Module,
                  amount_samples: int,
                  belief_size: List[int],
@@ -25,8 +24,8 @@ class PPEBase(ABC, Generic[ST]):
                  K_beliefs: int = 100,
                  predict_only: bool = False,
                  use_prior: bool = True,
-                 nrm_lr=1e-3,
-                 nrm_loss="mse",
+                 q_lr=1e-3,
+                 q_loss="mse",
                  policy: str = "both",
                  perception_lr=1e-3,
                  perception_loss='sampled',
@@ -34,7 +33,7 @@ class PPEBase(ABC, Generic[ST]):
                  device='cpu',
                  ):
         """
-        :param nrm: The neurosymbolic reverse model
+        :param q: The inference model
         :param perception: The perception network. Should accept samples from data
         :param amount_samples: The amount of samples to draw to train the NRM
         :param initial_concentration: The initial concentration of the Dirichlet distribution
@@ -42,7 +41,7 @@ class PPEBase(ABC, Generic[ST]):
         :param percept_loss_pref: When using perception_loss='both', this will prefer log-q if > 1.0, otherwise sampled
         """
         assert perception_loss in ['sampled', 'log-q', 'both']
-        assert nrm_loss in ['mse', 'bce']
+        assert q_loss in ['mse', 'bce']
         assert policy in ['both', 'off', 'on']
         # prediction only option is only supported for off-policy learning of nrm
         assert not (predict_only and policy in ['on', 'both'])
@@ -51,7 +50,7 @@ class PPEBase(ABC, Generic[ST]):
 
         self.predict_only = predict_only
         self.use_prior = use_prior
-        self.nrm = nrm
+        self.q = q
         self.perception = perception
         self.amount_samples = amount_samples
         self.belief_size = belief_size
@@ -59,14 +58,14 @@ class PPEBase(ABC, Generic[ST]):
         self.dirichlet_iters = dirichlet_iters
         self.dirichlet_lr = dirichlet_lr
         self.dirichlet_L2 = dirichlet_L2
-        self.nrm_loss = nrm_loss
+        self.q_loss = q_loss
         self.policy = policy
         self.perception_loss = perception_loss
         self.percept_loss_pref = percept_loss_pref
 
         # We're training these two models separately, so let's also use two different optimizers.
         #  This ensures we won't accidentally update the wrong model.
-        self.nrm_optimizer = torch.optim.Adam(self.nrm.parameters(), lr=nrm_lr)
+        self.nrm_optimizer = torch.optim.Adam(self.q.parameters(), lr=q_lr)
         self.perception_optimizer = torch.optim.Adam(self.perception.parameters(), lr=perception_lr)
 
         self.alpha = torch.ones((len(belief_size), max(belief_size)), device=device) * initial_concentration
@@ -92,7 +91,7 @@ class PPEBase(ABC, Generic[ST]):
         initial_state = self.initial_state(P, y, w, generate_w=not self.predict_only)
 
         amt_samples = self.amount_samples if self.use_prior else 1
-        result = self.nrm.forward(initial_state, amt_samples=amt_samples)
+        result = self.q.forward(initial_state, amt_samples=amt_samples)
         log_q = (torch.stack(result.forward_probabilities, -1) + EPS).log()
 
         if self.predict_only:
@@ -102,9 +101,9 @@ class PPEBase(ABC, Generic[ST]):
         # Joint matching loss
         # (batch,)
         log_p = p_w.log_prob(w)
-        if self.nrm_loss == 'mse':
+        if self.q_loss == 'mse':
             return (log_q.sum(-1) - log_p.sum(-1)).pow(2).mean()
-        elif self.nrm_loss == 'bce':
+        elif self.q_loss == 'bce':
             return nn.BCELoss()(log_q.sum(-1).exp(), log_p.sum(-1).exp())
         raise NotImplementedError()
 
@@ -113,7 +112,7 @@ class PPEBase(ABC, Generic[ST]):
         Perception loss that maximizes the log probability of the label under the NRM model.
         """
         initial_state = self.initial_state(P, y, generate_w=False)
-        result = self.nrm.forward(initial_state)
+        result = self.q.forward(initial_state)
         stack_ys = (torch.stack(result.forward_probabilities, -1) + EPS).log()
         log_q_y = stack_ys.sum(-1).mean()
         return -log_q_y
@@ -124,7 +123,7 @@ class PPEBase(ABC, Generic[ST]):
         Perception loss that maximizes the log probability of the label under the NRM model.
         """
         initial_state = self.initial_state(P.detach(), y, generate_w=True)
-        result = self.nrm.forward(initial_state, amt_samples=self.amount_samples)
+        result = self.q.forward(initial_state, amt_samples=self.amount_samples)
 
         percept_loss = nrm_loss = 0.
 
@@ -142,7 +141,7 @@ class PPEBase(ABC, Generic[ST]):
             prediction = self.symbolic_function(torch.stack(result.final_state.w, -1))
             successes = prediction == y.unsqueeze(-1)
             # print(y)
-            if self.nrm.prune:
+            if self.q.prune:
                 # If we prune, we know we are successful by definition
                 assert successes.all()
                 percept_loss = -log_p_w.mean()
@@ -155,9 +154,9 @@ class PPEBase(ABC, Generic[ST]):
             log_q_w_y = (torch.stack(result.forward_probabilities[len(result.final_state.y):], -1) + EPS).log().sum(-1)
             log_q = log_q_y + log_q_w_y
             log_p_w = log_p_w.detach()
-            if self.nrm_loss == 'mse':
+            if self.q_loss == 'mse':
                 nrm_loss = (log_q - log_p_w).pow(2).mean()
-            elif self.nrm_loss == 'bce':
+            elif self.q_loss == 'bce':
                 nrm_loss = nn.BCELoss()(log_q.exp(), log_p_w.exp())
             else:
                 raise NotImplementedError()
@@ -174,7 +173,7 @@ class PPEBase(ABC, Generic[ST]):
         """
         P = self.perception(x)
         self.nrm_optimizer.zero_grad()
-        nrm_loss = 0.
+        q_loss = 0.
         use_off_policy_loss = not self.policy == 'on'
         if use_off_policy_loss or self.perception_loss == 'both':
             if self.beliefs is None:
@@ -188,9 +187,9 @@ class PPEBase(ABC, Generic[ST]):
             p_P = fit_dirichlet(beliefs, self.alpha, self.dirichlet_lr, self.dirichlet_iters, self.dirichlet_L2)
 
             if use_off_policy_loss:
-                _nrm_loss = self.off_policy_loss(p_P, P.detach())
-                _nrm_loss.backward()
-                nrm_loss += _nrm_loss
+                _q_loss = self.off_policy_loss(p_P, P.detach())
+                _q_loss.backward()
+                q_loss += _q_loss
                 self.nrm_optimizer.step()
                 self.nrm_optimizer.zero_grad()
 
@@ -203,12 +202,12 @@ class PPEBase(ABC, Generic[ST]):
 
         self.perception_optimizer.zero_grad()
         if use_sampled_loss or use_on_policy_loss:
-            _loss_sampled, _nrm_loss = self.sampled_loss(P, y, use_sampled_loss, use_on_policy_loss)
+            _loss_sampled, _q_loss = self.sampled_loss(P, y, use_sampled_loss, use_on_policy_loss)
             if use_sampled_loss:
                 loss_sampled = _loss_sampled
             if use_on_policy_loss:
-                _nrm_loss.backward()
-                nrm_loss += _nrm_loss
+                _q_loss.backward()
+                q_loss += _q_loss
                 self.nrm_optimizer.step()
         if use_log_q_loss:
             loss_log_q = self.log_q_loss(P, y)
@@ -222,7 +221,7 @@ class PPEBase(ABC, Generic[ST]):
         loss_percept.backward()
         self.perception_optimizer.step()
 
-        return nrm_loss, loss_percept
+        return q_loss, loss_percept
 
     def test(self, x: torch.Tensor, y: torch.Tensor, true_w: Optional[List[torch.Tensor]] = None
              ) -> Tuple[torch.Tensor, torch.Tensor, Optional[torch.Tensor], Optional[torch.Tensor]]:
@@ -235,7 +234,7 @@ class PPEBase(ABC, Generic[ST]):
         """
         P = self.perception(x)
         initial_state = self.initial_state(P, generate_w=not self.predict_only)
-        result: NRMResult[ST] = self.nrm.beam(initial_state, beam_size=self.amount_samples)
+        result: InferenceResult[ST] = self.q.beam(initial_state, beam_size=self.amount_samples)
         successes = self.success(result.final_state.y, y, beam=True).float()
 
         prior_predictions = torch.argmax(P, dim=-1)
