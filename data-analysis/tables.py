@@ -84,7 +84,7 @@ class OtherMethodGroup(BaseGroup):
         return f"{mean:.2f} $\pm$ {std:.2f}"
 
 
-g_full_no_prune = Group(df, "joint", predict_only=False, use_prior=True, prune=False)
+g_full_no_prune = Group(df, "explain", predict_only=False, use_prior=True, prune=False)
 g_full_prune = Group(df, "pruning", predict_only=False, use_prior=True, prune=True)
 g_predict_prior = Group(df, "predict", predict_only=True, use_prior=True, prune=False)
 g_predict_no_prior = Group(df, "no prior", predict_only=True, use_prior=False, prune=False)
@@ -93,8 +93,11 @@ g_embed_2_sym = OtherMethodGroup(df_other_methods, "Embed2Sym", True)
 g_DPL = OtherMethodGroup(df_other_methods, "DeepProbLog", False)
 g_NeurASP = OtherMethodGroup(df_other_methods, "NeurASP", False)
 g_DPLAstar = OtherMethodGroup(df_other_methods, "DPLA*", False)
+g_DSL = OtherMethodGroup(df_other_methods, "DeepStochLog", False)
+g_LTN = OtherMethodGroup(df_other_methods, "LTN", False)
+g_NeuPSL = OtherMethodGroup(df_other_methods, "NeuPSL", False)
 
-other_methods = [g_DPL, g_NeurASP, g_DPLAstar, g_embed_2_sym]
+other_methods = [g_LTN, g_NeuPSL, g_NeurASP, g_DPL, g_DPLAstar, g_DSL, g_embed_2_sym]
 
 all_compare_groups = [g_predict_prior] + other_methods
 
@@ -137,9 +140,10 @@ def print_compare_to_other_methods_table(g_full, g_predict, other_methods):
     print(f"N & {values}\\\\")
     print("\\hline ")
 
+    print(" & \multicolumn{5}{c}{\\textbf{Symbolic prediction}} \\\\")
     for g in other_methods:
         print(f"{g.name} & {to_result_row(g, compare_Ns, True)}\\\\")
-    print(f"ANPI (predict) & {to_result_row(g_predict, compare_Ns, True)}\\\\")
+    print(f"A-NeSI (predict) & {to_result_row(g_predict, compare_Ns, True)}\\\\")
     # print(f"ANPI (joint)    & {to_result_row(g_full, compare_Ns, True)}\\\\")
 
     print("\\hline ")
@@ -147,7 +151,7 @@ def print_compare_to_other_methods_table(g_full, g_predict, other_methods):
     for g in other_methods:
         if g.also_has_discretize:
             print(f"{g.name} & {to_result_row(g, compare_Ns, False)}\\\\")
-    print(f"ANPI (predict) & {to_result_row(g_predict, compare_Ns, False)}\\\\")
+    print(f"A-NeSI (predict) & {to_result_row(g_predict, compare_Ns, False)}\\\\")
     # print(f"ANPI (joint)    & {to_result_row(g_full, compare_Ns, False)}\\\\")
     print("\\hline ")
     print("Reference      &", "            & ".join([f"{100*0.99**(2*N):.2f}" for N in compare_Ns]))
@@ -162,12 +166,13 @@ def print_compare_ablations(groups):
     print(f"N & {values}\\\\")
     print("\\hline")
 
+    print(" & \multicolumn{6}{c}{\\textbf{Symbolic prediction}} \\\\")
     for group in groups:
-        print(f"ANPI ({group.ablation_name}) & {to_result_row(group, ablation_Ns, True)}\\\\")
+        print(f"A-NeSI ({group.ablation_name}) & {to_result_row(group, ablation_Ns, True)}\\\\")
     print("\hline")
     print(" & \multicolumn{6}{c}{\\textbf{Neural prediction}} \\\\")
     for group in groups:
-        print(f"ANPI ({group.ablation_name}) & {to_result_row(group, ablation_Ns, False)}\\\\")
+        print(f"A-NeSI ({group.ablation_name}) & {to_result_row(group, ablation_Ns, False)}\\\\")
 
 ablation_groups = [g_full_no_prune, g_full_prune, g_predict_prior, g_predict_no_prior]
 
