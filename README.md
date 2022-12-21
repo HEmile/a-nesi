@@ -27,7 +27,13 @@ Run the following:
 
 ## Experiments
 
-The experiments are presented in the papers are available in the [src/anesi/experiments](src/anesi/experiments) directory.
+The experiments are presented in the papers are available in the [src/anesi/experiments](src/anesi/experiments) directory. The experiments are organized with Weights&Biases. To reproduce the experiments from the paper, run
+```bash
+cd anes/experiments
+wandb sweep repeat/test_predict_only.yaml
+wandb agent <sweep_id>
+```
+Note that you will need to update the entity and project parameters of wandb in the sweep files. 
 
 ## Papers
 1. TBC
