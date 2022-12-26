@@ -40,19 +40,12 @@ Note that you will need to update the entity and project parameters of wandb in 
 ```
 @misc{https://doi.org/10.48550/arxiv.2212.12393,
   doi = {10.48550/ARXIV.2212.12393},
-  
   url = {https://arxiv.org/abs/2212.12393},
-  
   author = {van Krieken, Emile and Thanapalasingam, Thiviyan and Tomczak, Jakub M. and van Harmelen, Frank and Teije, Annette ten},
-  
   keywords = {Machine Learning (cs.LG), Artificial Intelligence (cs.AI), Logic in Computer Science (cs.LO), Machine Learning (stat.ML), FOS: Computer and information sciences, FOS: Computer and information sciences},
-  
   title = {A-NeSI: A Scalable Approximate Method for Probabilistic Neurosymbolic Inference},
-  
   publisher = {arXiv},
-  
   year = {2022},
-  
   copyright = {arXiv.org perpetual, non-exclusive license}
 }
 ```
