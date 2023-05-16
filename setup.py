@@ -5,9 +5,6 @@ setup(
     name="anesi",
     version="0.0.1",
     description="A-NeSI: Approximate Neurosymbolic Inference",
-    url="https://github.com/HEmile/a-nesi",
-    author="Emile van Krieken",
-    author_email="e.van.Krieken@vu.nl",
     license='MIT',
     classifiers=[
         "License :: OSI Approved :: Apache Software License",
