@@ -1,0 +1,41 @@
+program: path_planning.py
+project: shortest-path
+entity: nesy-gems
+method: bayes
+metric:
+  name: val_accuracy_prior
+  goal: maximize
+early_terminate:
+  type: hyperband
+  min_iter: 300
+parameters:
+  N:
+    value: 12
+  epochs:
+    value: 50
+  batch_size:
+    value: 70
+  batch_size_test:
+    value: 400
+  amount_samples:
+    values: [10, 20, 40, 70, 100, 140]
+  q_lr:
+    distribution: log_uniform_values
+    min: 1e-6
+    max: 1e-1
+  dirichlet_iters:
+    value: 0
+  P_source:
+    value: both
+  perception_lr:
+    distribution: log_uniform_values
+    min: 1e-6
+    max: 1e-1
+  perception_model:
+    value: comb_resnet
+  load_model:
+    value: pretrained_path_resnet_1850.pt
+  entropy_weight:
+    value: 0.0
+  rloo_samples:
+    value: 0

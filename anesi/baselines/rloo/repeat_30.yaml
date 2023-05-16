@@ -1,0 +1,31 @@
+program: path_planning.py
+project: shortest-path
+entity: nesy-gems
+method: grid
+parameters:
+  N:
+    value: 30
+  runs:
+    values: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
+  epochs:
+    value: 10
+  batch_size:
+    value: 70
+  batch_size_test:
+    value: 400
+  amount_samples:
+    value: 1
+  q_lr:
+    value: 0.0
+  dirichlet_iters:
+    value: 0
+  P_source:
+    value: both
+  perception_lr:
+    value: 0.0005
+  perception_model:
+    value: small
+  rloo_samples:
+    value: 10
+  test:
+    value: True

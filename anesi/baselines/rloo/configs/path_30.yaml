@@ -1,0 +1,11 @@
+N: 30
+batch_size: 70
+batch_size_test: 200
+perception_lr: 0.00049680571733084574
+epochs: 50
+
+DEBUG: False
+use_ray: False
+rloo_samples: 10
+
+perception_model: small

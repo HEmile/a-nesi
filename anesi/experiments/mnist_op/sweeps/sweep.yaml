@@ -1,0 +1,53 @@
+program: mnistop.py
+project: mnist-add
+entity: nesy-gems
+method: random
+metric:
+  name: val_accuracy
+  goal: maximize
+early_terminate:
+  type: hyperband
+  min_iter: 4
+parameters:
+  N:
+    values: [1]
+  epochs:
+    values: [30]
+  batch_size:
+    values: [ 16, 64, 256, 1024]
+  amt_samples:
+    values: [ 16, 64, 256, 1024 ]
+  K_beliefs:
+    values: [ 100, 1000, 10000 ]
+  nrm_lr:
+    distribution: log_uniform_values
+    min: 1e-4
+    max: 1e-1
+  perception_lr:
+    distribution: log_uniform_values
+    min: 1e-4
+    max: 1e-1
+  dirichlet_lr:
+    distribution: log_uniform_values
+    min: 1e-3
+    max: 1
+  dirichlet_iters:
+    distribution: q_log_uniform_values
+    min: 1
+    max: 100
+  dirichlet_init:
+    distribution: log_uniform_values
+    min: 1e-1
+    max: 10
+  nrm_loss:
+    values: [ 'mse', 'bce' ]
+  perception_loss:
+    values: [ 'log-q', 'sampled' ]
+  prune:
+    values: [True]
+  policy:
+    values: [ 'on', 'both']
+  hidden_size:
+    distribution: q_log_uniform_values
+    min: 20
+    max: 2000

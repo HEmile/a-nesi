@@ -1,0 +1,24 @@
+N: 4
+split: 1
+verbose: 0
+K_beliefs: 650
+batch_size: 20
+batch_size_test: 200
+dirichlet_L2: 330000
+dirichlet_init: 0.01
+dirichlet_iters: 2
+dirichlet_lr: 0.045
+perception_lr: 0.001
+hidden_size: 100
+layers: 1
+q_lr: 0.003
+epochs: 4000
+
+P_source: both
+train_negatives: True
+encode_P: False
+encoding: pair
+
+predict_only: True
+perception_loss: log-q
+prune: True

@@ -1,3 +1,5 @@
+import math
+
 import pandas
 import numpy as np
 
@@ -10,8 +12,8 @@ df['use_prior'].fillna(True, inplace=True)
 
 Ns = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 15]
 
-compare_Ns = [1, 2, 3, 4, 15]
-ablation_Ns = [1, 2, 4, 7, 10, 15]
+compare_Ns = [1, 2, 4, 15]
+ablation_Ns = [1, 3, 6, 10, 15]
 
 class BaseGroup:
 
@@ -19,6 +21,11 @@ class BaseGroup:
         self.should_bold_discretize = {N: False for N in Ns}
         self.should_bold_neural = {N: False for N in Ns}
 
+    def test_accuracy(self, N):
+        raise NotImplementedError()
+
+    def amount_runs(self, N):
+        return 10
 
 class Group(BaseGroup):
 
@@ -57,21 +64,22 @@ class OtherMethodGroup(BaseGroup):
         self.also_has_discretize = also_has_discretize
         self.name = name
 
-
-    def test_accuracy(self, N):
+    def _row(self, N):
         df_for_N = self.df[self.df["N"] == N]
         if len(df_for_N) == 0:
             return None
-        row = df_for_N.iloc[0]
+        return df_for_N.iloc[0]
 
+    def test_accuracy(self, N):
+        row = self._row(N)
+        if row is None:
+            return None
         return row["test_accuracy"], row["test_accuracy_std"]
 
     def test_accuracy_discretize(self, N):
-        df_for_N = self.df[self.df["N"] == N]
-        if len(df_for_N) == 0:
+        row = self._row(N)
+        if row is None:
             return None
-        row = df_for_N.iloc[0]
-
         return row["test_accuracy_prior"], row["test_accuracy_prior_std"]
 
     def acc_cell(self, N, discretize):
@@ -82,6 +90,9 @@ class OtherMethodGroup(BaseGroup):
         if not std or np.isnan(std):
             return f"{mean:.2f}"
         return f"{mean:.2f} $\pm$ {std:.2f}"
+
+    def amount_runs(self, N):
+        return self._row(N)["runs"]
 
 
 g_full_no_prune = Group(df, "explain", predict_only=False, use_prior=True, prune=False)
@@ -97,9 +108,10 @@ g_DSL = OtherMethodGroup(df_other_methods, "DeepStochLog", False)
 g_LTN = OtherMethodGroup(df_other_methods, "LTN", False)
 g_NeuPSL = OtherMethodGroup(df_other_methods, "NeuPSL", False)
 
-other_methods = [g_LTN, g_NeuPSL, g_NeurASP, g_DPL, g_DPLAstar, g_DSL, g_embed_2_sym]
+other_methods = [g_LTN, g_DPL, g_DPLAstar, g_DSL, g_embed_2_sym]
 
-all_compare_groups = [g_predict_prior] + other_methods
+ablation_groups = [g_predict_prior, g_full_no_prune, g_full_prune, g_predict_no_prior]
+all_compare_groups = ablation_groups + other_methods
 
 def bold(groups, Ns, discretize):
     for group in groups:
@@ -111,19 +123,38 @@ def bold(groups, Ns, discretize):
     for N in Ns:
         best_group:BaseGroup = None
         best_acc = 0
+        best_sdd = 0
         for group in groups:
             if discretize:
-                acc = group.test_accuracy_discretize(N)
+                t = group.test_accuracy_discretize(N)
             else:
-                acc = group.test_accuracy(N)
-            if acc is not None and acc[0] > best_acc:
-                best_acc = acc[0]
+                t = group.test_accuracy(N)
+            if t is None:
+                continue
+            acc, sdd = t
+            if acc > best_acc:
+                best_acc = acc
+                best_sdd = sdd
                 best_group = group
+        lower_confidence = best_acc - 1.96 * best_sdd / math.sqrt(best_group.amount_runs(N))
         if discretize:
             best_group.should_bold_discretize[N] = True
         else:
             best_group.should_bold_neural[N] = True
-
+        # for group in groups:
+        #     if discretize:
+        #         t = group.test_accuracy_discretize(N)
+        #     else:
+        #         t = group.test_accuracy(N)
+        #     if t is None:
+        #         continue
+        #     acc, sdd = t
+        #     upper_confidence = acc + 1.96 * sdd / math.sqrt(group.amount_runs(N))
+        #     if upper_confidence > lower_confidence:
+        #         if discretize:
+        #             group.should_bold_discretize[N] = True
+        #         else:
+        #             group.should_bold_neural[N] = True
 
 bold(all_compare_groups, compare_Ns, False)
 bold(all_compare_groups, compare_Ns, True)
@@ -135,46 +166,49 @@ def to_result_row(group, Ns, discretize):
     return ' & '.join(list(map(to_cell, Ns)))
 
 
-def print_compare_to_other_methods_table(g_full, g_predict, other_methods):
-    values = ' & '.join(list(map(str, compare_Ns)))
-    print(f"N & {values}\\\\")
+def print_compare_to_other_methods_table(g_full, g_predict, other_methods, anesi_groups):
+    values = ' & '.join(list(map(lambda N: "N=" + str(N), compare_Ns)))
+    print(f" & {values}\\\\")
     print("\\hline ")
 
-    print(" & \multicolumn{5}{c}{\\textbf{Symbolic prediction}} \\\\")
+    print(" & \multicolumn{4}{c}{\\textbf{Symbolic prediction}} \\\\")
     for g in other_methods:
         print(f"{g.name} & {to_result_row(g, compare_Ns, True)}\\\\")
-    print(f"A-NeSI (predict) & {to_result_row(g_predict, compare_Ns, True)}\\\\")
-    # print(f"ANPI (joint)    & {to_result_row(g_full, compare_Ns, True)}\\\\")
+    # print(f"A-NeSI (predict) & {to_result_row(g_predict, compare_Ns, True)}\\\\")
+    # print(f"A-NeSI (explain)    & {to_result_row(g_full, compare_Ns, True)}\\\\")
+    for group in anesi_groups:
+        print("\\textsc{A-NeSI}" + f"({group.ablation_name}) & {to_result_row(group, compare_Ns, True)}\\\\")
 
     print("\\hline ")
-    print(" & \multicolumn{5}{c}{\\textbf{Neural prediction}} \\\\")
+    print(" & \multicolumn{4}{c}{\\textbf{Neural prediction}} \\\\")
     for g in other_methods:
         if g.also_has_discretize:
             print(f"{g.name} & {to_result_row(g, compare_Ns, False)}\\\\")
-    print(f"A-NeSI (predict) & {to_result_row(g_predict, compare_Ns, False)}\\\\")
-    # print(f"ANPI (joint)    & {to_result_row(g_full, compare_Ns, False)}\\\\")
+    # print(f"A-NeSI (predict) & {to_result_row(g_predict, compare_Ns, False)}\\\\")
+    # print(f"A-NeSI (explain)    & {to_result_row(g_full, compare_Ns, False)}\\\\")
+    for group in anesi_groups:
+        print("\\textsc{A-NeSI}" + f"({group.ablation_name}) & {to_result_row(group, compare_Ns, False)}\\\\")
     print("\\hline ")
     print("Reference      &", "            & ".join([f"{100*0.99**(2*N):.2f}" for N in compare_Ns]))
 
-print_compare_to_other_methods_table(g_full_no_prune, g_predict_prior, other_methods)
+print_compare_to_other_methods_table(g_full_no_prune, g_predict_prior, other_methods, ablation_groups)
 
 for i in range(5):
     print()
 
 def print_compare_ablations(groups):
-    values = ' & '.join(list(map(str, ablation_Ns)))
-    print(f"N & {values}\\\\")
+    values = ' & '.join(list(map(lambda N: "N=" + str(N), ablation_Ns)))
+    print(f" & {values}\\\\")
     print("\\hline")
 
-    print(" & \multicolumn{6}{c}{\\textbf{Symbolic prediction}} \\\\")
+    print("A-NeSI & \multicolumn{5}{c}{\\textbf{Symbolic prediction}} \\\\")
     for group in groups:
-        print(f"A-NeSI ({group.ablation_name}) & {to_result_row(group, ablation_Ns, True)}\\\\")
+        print(f"{group.ablation_name} & {to_result_row(group, ablation_Ns, True)}\\\\")
     print("\hline")
-    print(" & \multicolumn{6}{c}{\\textbf{Neural prediction}} \\\\")
+    print("A-NeSI & \multicolumn{5}{c}{\\textbf{Neural prediction}} \\\\")
     for group in groups:
-        print(f"A-NeSI ({group.ablation_name}) & {to_result_row(group, ablation_Ns, False)}\\\\")
+        print(f"{group.ablation_name} & {to_result_row(group, ablation_Ns, False)}\\\\")
 
-ablation_groups = [g_full_no_prune, g_full_prune, g_predict_prior, g_predict_no_prior]
 
 bold(ablation_groups, ablation_Ns, False)
 bold(ablation_groups, ablation_Ns, True)

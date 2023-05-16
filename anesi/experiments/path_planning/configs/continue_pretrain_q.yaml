@@ -1,0 +1,23 @@
+N: 30
+amount_samples: 20
+batch_size: 100
+batch_size_test: 200
+fixed_alpha: 0.005
+perception_lr: 0.0001
+q_lr: 0.00025
+epochs: 4000
+
+DEBUG: False
+pretrain_epochs: 4000
+use_ray: True
+
+perception_model: comb_resnet
+q_model: path_resnet
+
+load_model: 30_vvthh0pw_fast_low_1550.pt
+
+perception_loss: "none"
+predict_only: True
+P_source: prior
+save_freq: 50
+val_freq: 50

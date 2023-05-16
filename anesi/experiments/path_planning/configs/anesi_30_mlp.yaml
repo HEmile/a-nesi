@@ -1,0 +1,20 @@
+N: 30
+K_beliefs: 1000
+amount_samples: 1
+batch_size: 70
+batch_size_test: 500
+perception_lr: 0.02
+rloo_lr: 0.000
+q_lr: 0.0
+epochs: 10
+
+log_per_epoch: 10
+pretrain_epochs: 0
+use_ray: False
+perception_model: mlp
+q_model: path_resnet
+load_model: 30x30_3700e_20s.pt
+entropy_weight: 0.
+rloo_samples: 0
+
+predict_only: True

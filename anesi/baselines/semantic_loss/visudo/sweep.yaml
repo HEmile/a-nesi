@@ -1,0 +1,20 @@
+program: visudo.py
+project: visudo
+entity: nesy-gems
+method: bayes
+metric:
+  name: val_accuracy
+  goal: maximize
+parameters:
+  N:
+    values: [4]
+  epochs:
+    values: [100]
+  batch_size:
+    values: [20]
+  batch_size_test:
+    values: [200]
+  lr:
+    distribution: log_uniform_values
+    min: 1e-5
+    max: 6e-2

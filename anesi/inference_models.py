@@ -68,6 +68,7 @@ class NoPossibleActionsException(ValueError):
 class InferenceResult(Generic[ST]):
     final_state: ST
     forward_probabilities: List[torch.Tensor]
+    distributions: List[torch.Tensor]
     final_action: torch.Tensor
     final_distribution: torch.Tensor
 
@@ -76,20 +77,31 @@ Sampler = Callable[[torch.Tensor, int, ST], torch.Tensor]
 
 
 class InferenceModelBase(ABC, nn.Module, Generic[ST]):
-    def __init__(self, prune=True):
+    def __init__(self, prune=False, no_actions_behaviour: str = "raise"):
+        """
+        :param prune: Whether to prune the distribution based on symbolic reasoning
+        :param no_actions_behaviour: What to do when there are no possible actions. Either "raise" an exception, or
+            "ignore" the constraint and continue sampling.
+        """
         super().__init__()
+        assert no_actions_behaviour in ["raise", "ignore"]
         self.prune = prune
+        self.no_actions_behaviour = no_actions_behaviour
 
     def _compute_distribution(self, state: ST) -> torch.Tensor:
         _distribution = self.distribution(state)
         is_binary = _distribution.shape[-1] == 1
         if is_binary:
-            _distribution = torch.cat([_distribution, 1 - _distribution], dim=-1)
+            _distribution = torch.cat([1 - _distribution, _distribution], dim=-1)
         if self.prune:
             mask = state.symbolic_pruner().float()
-            if (mask == 0).all(dim=-1).any():
+            failed = (mask == 0).all(dim=-1)
+            any_failed = failed.any()
+            if self.no_actions_behaviour == "raise" and any_failed:
                 print("constraint", state.constraint, "y", state.y, "w", state.w, mask)
                 raise NoPossibleActionsException("No viable actions!")
+            if self.no_actions_behaviour == "ignore" and any_failed:
+                mask[failed] = 1
 
             distribution = (_distribution + 10e-15) * mask
             distribution = distribution / (distribution.sum(-1, keepdim=True)).detach()
@@ -101,8 +113,16 @@ class InferenceModelBase(ABC, nn.Module, Generic[ST]):
                 state: ST,
                 max_steps: Optional[int] = None,
                 amt_samples=1,
-                sampler: Optional[Sampler] = None) -> InferenceResult[ST]:
+                sampler: Optional[Sampler] = None,
+                beam: bool = False) -> InferenceResult[ST]:
+        """
+        :param state: The initial state
+        :param parallel: Whether to run over time in parallel. This is only possible with constraints given.
+        """
+        if beam:
+            return self.beam(state, amt_samples)
         forward_probabilities = []
+        distributions = []
         steps = max_steps
         assert not state.final and (steps is None or steps > 0)
 
@@ -111,6 +131,7 @@ class InferenceModelBase(ABC, nn.Module, Generic[ST]):
 
         while not state.final and (steps is None or steps > 0):
             distribution = self._compute_distribution(state)
+            distributions.append(distribution)
 
             constraint_y = state.constraint[0]
             constraint_w = state.constraint[1]
@@ -125,7 +146,7 @@ class InferenceModelBase(ABC, nn.Module, Generic[ST]):
                 #  But we also only want to do this once, otherwise we get an exponential explosion of samples
                 if state.constraint == (None, None) and len(state.y) == 0 or \
                         len(state.w) == 0 and state.constraint[0] != None \
-                        and state.constraint[1] == None and len(state.constraint[0]) == len(state.y):
+                        and len(state.constraint[1]) == 0 and len(state.constraint[0]) == len(state.y):
                     n_samples = amt_samples
                 else:
                     n_samples = 1
@@ -150,7 +171,7 @@ class InferenceModelBase(ABC, nn.Module, Generic[ST]):
             if not state.generate_w and state.finished_generating_y():
                 break
         final_state = state
-        return InferenceResult(final_state, forward_probabilities, action, s_dist)
+        return InferenceResult(final_state, forward_probabilities, distributions, action, s_dist)
 
     def beam(self, initial_state: ST, beam_size: int):
         """
@@ -158,11 +179,13 @@ class InferenceModelBase(ABC, nn.Module, Generic[ST]):
         """
         # List of [batch, beam_size]
         forward_probabilities = []
+        distributions = []
 
         state = initial_state
         first_iteration = True
         while not state.final:
             distribution = self._compute_distribution(state)
+            distributions.append(distribution)
 
             if first_iteration:
                 # [batch, amt_actions]
@@ -198,12 +221,12 @@ class InferenceModelBase(ABC, nn.Module, Generic[ST]):
             if not state.generate_w and state.finished_generating_y():
                 break
         final_state = state
-        return InferenceResult(final_state, forward_probabilities, action, distribution)
+        return InferenceResult(final_state, forward_probabilities, distributions, action, distribution)
 
     def regular_sampler(self, distribution: torch.Tensor, amt_samples: int,
                         state: ST) -> torch.Tensor:
         sample_shape = (amt_samples,) if amt_samples > 1 else ()
-        action = Categorical(distribution).sample(sample_shape)
+        action = Categorical(probs=distribution).sample(sample_shape)
         if amt_samples > 1:
             action = action.T
         return action

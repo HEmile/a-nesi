@@ -1,0 +1,55 @@
+program: visudo.py
+project: visudo
+entity: nesy-gems
+method: grid
+parameters:
+  N:
+    values: [9]
+  split:
+    values: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
+  epochs:
+    values: [5000]
+  batch_size:
+    values: [20]
+  batch_size_test:
+    values: [200]
+  amt_samples:
+    values: [500]
+  K_beliefs:
+    values: [1600]
+  q_lr:
+    values: [0.00301]
+  perception_lr:
+    values: [0.000554]
+  pretrain_epochs:
+    values: [50]
+  dirichlet_lr:
+    values: [0.00285]
+  dirichlet_iters:
+    values: [18]
+  dirichlet_init:
+    values: [0.02]
+  dirichlet_L2:
+    values: [250000]
+  nrm_loss:
+    values: [ 'mse' ]
+  perception_loss:
+    values: ['log-q']
+  prune:
+    values: [False]
+  policy:
+    values: [ 'off']
+  predict_only:
+    values: [True]
+  hidden_size:
+    values: [100]
+  layers:
+    values: [2]
+  encode_P:
+    values: [False]
+  train_negatives:
+    values: [True]
+  P_source:
+    values: [both]
+  test:
+    values: [True]

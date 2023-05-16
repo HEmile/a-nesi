@@ -9,6 +9,7 @@ class MNIST_Net(nn.Module):
         super(MNIST_Net, self).__init__()
         self.with_softmax = with_softmax
         self.size = size
+        self.N = N
         if with_softmax:
             if N == 1:
                 self.softmax = nn.Sigmoid()
@@ -24,9 +25,9 @@ class MNIST_Net(nn.Module):
         )
         self.classifier = nn.Sequential(
             nn.Linear(size, 120),
-            nn.ReLU(),
+            nn.ReLU(True),
             nn.Linear(120, 84),
-            nn.ReLU(),
+            nn.ReLU(True),
             nn.Linear(84, N),
         )
 
@@ -44,5 +45,5 @@ class MNIST_Net(nn.Module):
         x = self.classifier(x)
         if self.with_softmax:
             x = self.softmax(x)
-        x = x.reshape(batch_size, -1, 10)
+        x = x.reshape(batch_size, -1, self.N)
         return x

@@ -1,0 +1,65 @@
+program: mnistop.py
+project: mnist-add
+entity: nesy-gems
+method: bayes
+metric:
+  name: val_accuracy
+  goal: maximize
+early_terminate:
+  type: hyperband
+  min_iter: 4
+parameters:
+  N:
+    values: [4]
+  epochs:
+    values: [60]
+  batch_size:
+    distribution: q_log_uniform_values
+    min: 8
+    max: 32
+  amt_samples:
+    distribution: q_log_uniform_values
+    min: 256
+    max: 2048
+  K_beliefs:
+    values: [ 100, 1000 ]
+  nrm_lr:
+    distribution: log_uniform_values
+    min: 5e-4
+    max: 1e-2
+  perception_lr:
+    distribution: log_uniform_values
+    min: 1e-3
+    max: 1e-2
+  dirichlet_lr:
+    distribution: log_uniform_values
+    min: 5e-4
+    max: 5e-3
+  dirichlet_iters:
+    distribution: q_log_uniform_values
+    min: 5
+    max: 100
+  dirichlet_init:
+    distribution: log_uniform_values
+    min: 1e-3
+    max: 1
+  dirichlet_L2:
+    distribution: log_uniform_values
+    min: 1e-2
+    max: 100000
+  nrm_loss:
+    values: [ 'bce' ]
+  perception_loss:
+    values: ['both']
+  percept_loss_pref:
+    distribution: log_uniform_values
+    min: 1
+    max: 40
+  prune:
+    values: [True]
+  policy:
+    values: [ 'both']
+  hidden_size:
+    distribution: q_log_uniform_values
+    min: 200
+    max: 5000

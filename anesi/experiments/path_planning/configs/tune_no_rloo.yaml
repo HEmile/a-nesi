@@ -1,0 +1,24 @@
+N: 12
+K_beliefs: 1000
+amount_samples: 70
+batch_size: 70
+batch_size_test: 500
+dirichlet_L2: 438033
+dirichlet_init: 0.0007317568664261408
+dirichlet_iters: 17
+dirichlet_lr: 0.000001012856522434555
+perception_lr: 0.008370189207742766
+rloo_lr: 0.000
+q_lr: 0.0009942642813233612
+epochs: 5
+
+log_per_epoch: 10
+pretrain_epochs: 0
+use_ray: False
+perception_model: small
+q_model: path_resnet
+load_model: pretrained_path_resnet_1850.pt
+entropy_weight: 0.
+rloo_samples: 0
+
+predict_only: True

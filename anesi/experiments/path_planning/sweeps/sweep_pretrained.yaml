@@ -1,0 +1,77 @@
+program: path_planning.py
+project: shortest-path
+entity: nesy-gems
+method: bayes
+metric:
+  name: val_accuracy_prior
+  goal: maximize
+early_terminate:
+  type: hyperband
+  min_iter: 300
+parameters:
+  N:
+    values: [12]
+  epochs:
+    values: [100]
+  batch_size:
+    values: [70]
+  batch_size_test:
+    values: [400]
+  amount_samples:
+    values: [10, 50, 70, 140]
+  K_beliefs:
+    distribution: q_log_uniform_values
+    min: 100
+    max: 50000
+  q_lr:
+    distribution: log_uniform_values
+    min: 1e-4
+    max: 1e-1
+  perception_lr:
+    distribution: log_uniform_values
+    min: 1e-6
+    max: 1e-3
+  rloo_lr:
+    distribution: log_uniform_values
+    min: 1e-6
+    max: 1e-3
+  pretrain_epochs:
+    values: [0, 2, 5]
+  dirichlet_lr:
+    distribution: log_uniform_values
+    min: 1e-7
+    max: 1e-4
+  dirichlet_iters:
+    distribution: q_log_uniform_values
+    min: 1
+    max: 20
+  dirichlet_init:
+    distribution: log_uniform_values
+    min: 1e-5
+    max: 1e-2
+  dirichlet_L2:
+    distribution: log_uniform_values
+    min: 200000
+    max: 9000000
+  nrm_loss:
+    values: [ 'mse' ]
+  perception_loss:
+    values: ['log-q']
+  prune:
+    values: [False]
+  policy:
+    values: [ 'off']
+  predict_only:
+    values: [True]
+  P_source:
+    values: [both]
+  perception_model:
+    values: [small, comb_resnet]
+  q_model:
+    values: [path_resnet]
+  load_model:
+    values: [pretrained_path_resnet_1850.pt]
+  entropy_weight:
+    values: [0.0, 0.01, 0.1, 0.001]
+  rloo_samples:
+    values: [0, 2, 4, 10]

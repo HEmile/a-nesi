@@ -1,0 +1,26 @@
+N: 12
+K_beliefs: 650
+amount_samples: 200
+batch_size: 100
+batch_size_test: 200
+dirichlet_L2: 330000
+dirichlet_init: 0.01
+dirichlet_iters: 2
+dirichlet_lr: 0.045
+perception_lr: 0.0001
+q_lr: 0.003
+epochs: 4000
+
+DEBUG: False
+log_per_epoch: 50
+pretrain_epochs: 0
+use_ray: False
+entropy_weight: 0.01
+rloo_samples: 5
+
+perception_model: mlp
+q_model: path_resnet
+
+perception_loss: log-q
+predict_only: True
+P_source: prior

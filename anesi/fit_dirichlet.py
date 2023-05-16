@@ -3,7 +3,7 @@ from torch.distributions import Dirichlet
 from torch.nn.functional import softplus
 
 
-def fit_dirichlet(beliefs: torch.Tensor, alpha: torch.Tensor, lr=1, iters=1000, L2=0.0) -> Dirichlet:
+def fit_dirichlet(beliefs: torch.Tensor, alpha: torch.Tensor, optimizer, iters=1000, L2=0.0) -> Dirichlet:
     """
     Fit a Dirichlet distribution to the beliefs.
     :param beliefs: Tensor of shape (K, |W|, n) where K is the number of beliefs, |W| is number of elements in a world
@@ -18,7 +18,6 @@ def fit_dirichlet(beliefs: torch.Tensor, alpha: torch.Tensor, lr=1, iters=1000, 
     data = beliefs
     N = data.shape[0]
     eps = 10e-8
-    optimizer = torch.optim.Adam([alpha], lr=lr)
     statistics = (data + eps).log().mean(0).detach()
     for i in range(iters):
         # Dirichlet log likelihood. See https://tminka.github.io/papers/dirichlet/minka-dirichlet.pdf

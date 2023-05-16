@@ -66,7 +66,7 @@ class GroupDPL:
 g_predict = Group(df, True, "predict")
 g_joint = Group(df, False, "explain")
 
-sciplot.set_size_cm(9, 5.5)
+sciplot.set_size_cm(15, 5)
 
 x = np.arange(1, 16, 1)
 x_short = np.arange(1, 6, 1)
@@ -113,7 +113,7 @@ with sciplot.style():
     c_dsl, l_dsl = plot_with_sd(a0, np.arange(1, 5, 1), grounding_dsl, grounding_dsl, grounding_dsl, label="DSL (grounding)")
 
     c_dpla = plot_group(GroupDPL("gm", 0, "DPLA*"), x, a0, a1)
-    plot_group(GroupDPL("gm", 128, "DPLA* (pretrain)"), x, a0, a1, c_dpla)
+    # plot_group(GroupDPL("gm", 128, "DPLA* (pretrain)"), x, a0, a1, c_dpla)
     c1, l1 = plot_with_sd(a0, x, *g_joint.arrays(), label="A-NeSI (explain)")
     c2, l2 = plot_with_sd(a0, x, *g_predict.arrays(), color=c1, label="A-NeSI (predict)")
     plot_with_sd(a1, x, *g_joint.arrays(), label="A-NeSI (joint)", color=c1, linestyle=l1)

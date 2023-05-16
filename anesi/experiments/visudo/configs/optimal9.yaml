@@ -1,0 +1,17 @@
+N: 9
+split: 1
+K_beliefs: 20
+batch_size: 20
+batch_size_test: 200
+dirichlet_L2: 60000
+dirichlet_init: 0.003
+dirichlet_iters: 30
+dirichlet_lr: 0.02
+hidden_size: 400
+layers: 1
+perception_lr: 0.0004
+q_lr: 0.003
+encode_P: False
+epochs: 5000
+P_source: both
+verbose: 0

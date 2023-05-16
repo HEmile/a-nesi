@@ -1,0 +1,7 @@
+N: 15
+batch_size_test: 200
+rloo_lr: 0.0005
+epochs: 400
+
+DEBUG: False
+rloo_samples: 100
