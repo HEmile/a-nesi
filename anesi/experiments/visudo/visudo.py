@@ -2,6 +2,7 @@ import argparse
 import time
 
 import yaml
+from anesi.anesi import TrainResult
 from torch.utils.data import DataLoader
 import torch
 import wandb
@@ -129,13 +130,13 @@ if __name__ == '__main__':
             x = grid.to(device)
             label = label.to(device)
             try:
-                loss_nrm, loss_percept = model.train_all(x, label)
+                results: TrainResult = model.train_all(x, label)
             except NoPossibleActionsException:
                 print("No possible actions during training")
                 continue
 
-            cum_loss_percept += loss_percept.item()
-            cum_loss_q += loss_nrm.item()
+            cum_loss_percept += results.percept_loss.item()
+            cum_loss_q += results.q_loss.item()
 
             if (i + 1) % log_iterations == 0:
                 avg_alpha = torch.nn.functional.softplus(model.alpha).mean()

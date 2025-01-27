@@ -387,3 +387,6 @@ class ViSudoModel(ANeSIBase[ViSudoState], nn.Module):
         #
         #     return torch.mean(successes), successes_prior, explain_acc, prior_acc
         return torch.mean(successes), successes_prior, avg_prior_y, prob_y
+    
+    def preprocess_y(self, y: torch.Tensor) -> List[torch.Tensor]:
+        raise NotImplementedError()
